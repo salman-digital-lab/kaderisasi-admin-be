@@ -10,6 +10,9 @@ import {
   storeActivityRegistration,
 } from '#validators/activity_validator'
 
+import { ACTIVITY_REGISTRANT_STATUS_ENUM } from '../../types/constants/activity.js'
+import { ACTIVITY_LEVEL_UPGRADE_MAP, ACTIVITY_TYPE_SPECIAL } from '../constants/activity_registration.js'
+
 export default class ActivityRegistrationsController {
   async store({ params, request, response }: HttpContext) {
     const payload = await storeActivityRegistration.validate(request.all())
@@ -119,6 +122,13 @@ export default class ActivityRegistrationsController {
     const status: string = payload.status
     const ids: number[] = payload.registrations_id
     try {
+      const { activityType } = await (await ActivityRegistration.findOrFail(ids[0])).related('activity').query().firstOrFail()
+
+      if (ACTIVITY_TYPE_SPECIAL.includes(activityType) && status === ACTIVITY_REGISTRANT_STATUS_ENUM.LULUS_KEGIATAN) {
+        const userIds = (await ActivityRegistration.query().select('user_id').whereIn('id', ids).paginate(1, ids.length)).all()
+        await Profile.query().whereIn('user_id', userIds.map(user => user.userId)).update({ level: ACTIVITY_LEVEL_UPGRADE_MAP[activityType as keyof typeof ACTIVITY_LEVEL_UPGRADE_MAP] })
+      }
+
       const affectedRows = await ActivityRegistration.query()
         .whereIn('id', ids)
         .update({ status: status })
