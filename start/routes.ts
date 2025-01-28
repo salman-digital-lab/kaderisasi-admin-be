@@ -13,8 +13,6 @@ const ProvincesController = () => import('#controllers/provinces_controller')
 const CitiesController = () => import('#controllers/cities_controller')
 const DashboardController = () => import('#controllers/dashboard_controller')
 const RolesController = () => import('#controllers/roles_controller')
-const PermissionsController = () => import('#controllers/permissions_controller')
-const RolesPermissionsController = () => import('#controllers/roles_permissions_controller')
 
 router
   .group(() => {
@@ -43,32 +41,9 @@ router
         router.get(':id', [RolesController, 'show'])
         router.post(':id', [RolesController, 'store'])
         router.put(':id', [RolesController, 'update'])
-        router.get(':id/permissions', [RolesPermissionsController, 'permissionsByRole'])
         router.delete(':id', [RolesController, 'delete'])
       })
       .prefix('roles')
-      .use(middleware.auth())
-
-    router
-      .group(() => {
-        router.get('', [PermissionsController, 'index'])
-        router.get(':id', [PermissionsController, 'show'])
-        router.post('', [PermissionsController, 'store'])
-        router.put('', [PermissionsController, 'update'])
-        router.delete(':id', [PermissionsController, 'delete'])
-      })
-      .prefix('permissions')
-      .use(middleware.auth())
-
-    router
-      .group(() => {
-        router.get('', [RolesPermissionsController, 'index'])
-        router.get(':id', [RolesPermissionsController, 'show'])
-        router.post('', [RolesPermissionsController, 'store'])
-        router.put('', [RolesPermissionsController, 'update'])
-        router.delete(':id', [RolesPermissionsController, 'delete'])
-      })
-      .prefix('roles-permissions')
       .use(middleware.auth())
 
     router

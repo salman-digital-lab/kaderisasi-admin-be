@@ -16,12 +16,10 @@ export const AdminUserFactory = factory
 
 export const RealAdminUserFactory = factory
   .define(AdminUser, async () => {
-    const roles = await Role.query().select('id')
     return {
       email: 'digilab@salmanitb.com',
       password: '123123123',
       display_name: 'Digilab Dev',
-      role_id: roles[Math.floor(Math.random() * (roles.length - 1))].id,
     }
   })
   .build()

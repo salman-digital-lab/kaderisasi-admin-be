@@ -48,7 +48,7 @@ export default class ActivitiesController {
           'is_published'
         )
         .orderBy('isPublished', 'desc')
-        .orderBy('createdAt', 'asc')
+        .orderBy('createdAt', 'desc')
         .paginate(page, perPage)
 
       return response.ok({
