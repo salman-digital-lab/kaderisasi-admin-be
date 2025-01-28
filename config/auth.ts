@@ -14,7 +14,7 @@ const authConfig = defineConfig({
   default: 'jwt',
   guards: {
     jwt: jwtGuard({
-      tokenExpiresIn: '1h',
+      tokenExpiresIn: '1d',
       provider: sessionUserProvider({
         model: () => import('#models/admin_user'),
       }),
@@ -34,8 +34,8 @@ export default authConfig
  * guards.
  */
 declare module '@adonisjs/auth/types' {
-  interface Authenticators extends InferAuthenticators<typeof authConfig> {}
+  interface Authenticators extends InferAuthenticators<typeof authConfig> { }
 }
 declare module '@adonisjs/core/types' {
-  interface EventsList extends InferAuthEvents<Authenticators> {}
+  interface EventsList extends InferAuthEvents<Authenticators> { }
 }
