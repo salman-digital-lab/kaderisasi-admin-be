@@ -13,7 +13,6 @@ export default class AdminusersController {
 
       const permissions = await AdminUser.query()
         .select('*')
-        .preload('role')
         .paginate(page, perPage)
 
       return response.ok({
@@ -84,8 +83,8 @@ export default class AdminusersController {
     const payload = await editAdminUser.validate(request.all())
     try {
       const id: number = params.id
-      const role = await AdminUser.findOrFail(id)
-      const updated = await role.merge({ role_id: payload.role_id }).save()
+      const admin = await AdminUser.findOrFail(id)
+      const updated = await admin.merge({ role: payload.role }).save()
 
       return response.ok({
         message: 'UPDATE_DATA_SUCCESS',

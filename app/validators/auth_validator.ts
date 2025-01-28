@@ -24,6 +24,6 @@ export const editPasswordValidator = vine.compile(
 
 export const editAdminUser = vine.compile(
   vine.object({
-    role_id: vine.number(),
+    role: vine.number(),
   })
 )
