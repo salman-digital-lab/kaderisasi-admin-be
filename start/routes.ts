@@ -12,7 +12,6 @@ const RuangCurhatController = () => import('#controllers/ruang_curhats_controlle
 const ProvincesController = () => import('#controllers/provinces_controller')
 const CitiesController = () => import('#controllers/cities_controller')
 const DashboardController = () => import('#controllers/dashboard_controller')
-const RolesController = () => import('#controllers/roles_controller')
 
 router
   .group(() => {
@@ -33,17 +32,6 @@ router
         router.put(':id/password', [AdminusersController, 'editPassword'])
       })
       .prefix('admin-users')
-      .use(middleware.auth())
-
-    router
-      .group(() => {
-        router.get('', [RolesController, 'index'])
-        router.get(':id', [RolesController, 'show'])
-        router.post(':id', [RolesController, 'store'])
-        router.put(':id', [RolesController, 'update'])
-        router.delete(':id', [RolesController, 'delete'])
-      })
-      .prefix('roles')
       .use(middleware.auth())
 
     router

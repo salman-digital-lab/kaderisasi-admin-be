@@ -10,7 +10,7 @@ export default class extends BaseSchema {
       table.string('password').notNullable()
 
       table.string('display_name')
-      table.integer('role_id').references('roles.id').onDelete('CASCADE')
+      table.integer('role')
 
       table.timestamp('created_at').notNullable()
       table.timestamp('updated_at').nullable()
