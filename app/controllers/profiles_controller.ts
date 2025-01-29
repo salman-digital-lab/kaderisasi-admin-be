@@ -9,13 +9,23 @@ export default class ProfilesController {
       const page = request.qs().page ?? 1
       const perPage = request.qs().per_page ?? 10
       const search = request.qs().search
+      const badge = request.qs().badge
 
-      const profiles = await Profile.query()
+      let query = Profile.query()
         .select('*')
         .where('name', 'ILIKE', search ? '%' + search + '%' : '%%')
         .preload('publicUser')
         .orderBy('name', 'asc')
-        .paginate(page, perPage)
+
+      if (badge) {
+        // Use LIKE for fuzzy search within the JSON array
+        query = query.whereRaw(`EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(badges) badge 
+          WHERE badge ILIKE ?
+        )`, [`%${badge}%`])
+      }
+
+      const profiles = await query.paginate(page, perPage)
 
       return response.ok({
         messages: 'GET_DATA_SUCCESS',
