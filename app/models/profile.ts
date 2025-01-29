@@ -67,9 +67,6 @@ export default class Profile extends BaseModel {
   declare university: BelongsTo<typeof University>
 
   @column()
-  declare university_temp: string
-
-  @column()
   declare major: string
 
   @column()
@@ -77,6 +74,9 @@ export default class Profile extends BaseModel {
 
   @column()
   declare level: number
+
+  @column()
+  declare badges: string[]
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

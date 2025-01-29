@@ -43,6 +43,9 @@ export default class Activity extends BaseModel {
   @column()
   declare description: string
 
+  @column()
+  declare badge: string
+
   @column.date()
   declare activityStart: DateTime
 

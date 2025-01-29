@@ -9,6 +9,7 @@ export default class extends BaseSchema {
       table.string('name').notNullable()
       table.string('slug').unique().notNullable()
       table.text('description')
+      table.text('badge')
 
       table.date('activity_start')
       table.date('activity_end')

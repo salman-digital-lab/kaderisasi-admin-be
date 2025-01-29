@@ -23,7 +23,9 @@ export default class extends BaseSchema {
       table.integer('university_id', 4).references('universities.id')
       table.string('major', 50)
       table.integer('intake_year')
+
       table.integer('level').defaultTo(0)
+      table.jsonb('badges').defaultTo('[]')
 
       table.timestamp('created_at', { useTz: true })
       table.timestamp('updated_at', { useTz: true })
