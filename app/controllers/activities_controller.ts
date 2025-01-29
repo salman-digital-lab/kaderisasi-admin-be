@@ -97,7 +97,6 @@ export default class ActivitiesController {
       }
 
       const image = payload.file
-      console.log(image)
 
       await image.moveToDisk(image.clientName || '')
 

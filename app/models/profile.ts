@@ -76,7 +76,7 @@ export default class Profile extends BaseModel {
   declare level: number
 
   @column()
-  declare badges: string[]
+  declare badges: string
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

@@ -24,6 +24,7 @@ export const activityValidator = vine.compile(
       .optional(),
     is_published: vine.number().optional(),
     activity_category: vine.number().withoutDecimals().positive().optional(),
+    badge: vine.string().optional(),
   })
 )
 

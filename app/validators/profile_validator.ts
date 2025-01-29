@@ -5,6 +5,7 @@ export const updateProfileValidator = vine.compile(
     name: vine.string().optional(),
     gender: vine.enum(['M', 'F']).optional(),
     personal_id: vine.string().optional(),
+    badges: vine.string().optional(),
 
     whatsapp: vine.string().optional(),
     line: vine.string().optional(),
