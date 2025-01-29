@@ -11,7 +11,10 @@ import {
 } from '#validators/activity_validator'
 
 import { ACTIVITY_REGISTRANT_STATUS_ENUM } from '../../types/constants/activity.js'
-import { ACTIVITY_LEVEL_UPGRADE_MAP, ACTIVITY_TYPE_SPECIAL } from '../constants/activity_registration.js'
+import {
+  ACTIVITY_LEVEL_UPGRADE_MAP,
+  ACTIVITY_TYPE_SPECIAL,
+} from '../constants/activity_registration.js'
 
 export default class ActivityRegistrationsController {
   async store({ params, request, response }: HttpContext) {
@@ -122,20 +125,67 @@ export default class ActivityRegistrationsController {
     const status: string = payload.status
     const ids: number[] = payload.registrations_id
     try {
-      const { activityType } = await (await ActivityRegistration.findOrFail(ids[0])).related('activity').query().firstOrFail()
+      const registration = await ActivityRegistration.findOrFail(ids[0])
+      const activity = await registration.related('activity').query().firstOrFail()
+      const { activityType } = activity
 
-      if (ACTIVITY_TYPE_SPECIAL.includes(activityType) && status === ACTIVITY_REGISTRANT_STATUS_ENUM.LULUS_KEGIATAN) {
-        const userIds = (await ActivityRegistration.query().select('user_id').whereIn('id', ids).paginate(1, ids.length)).all()
-        await Profile.query().whereIn('user_id', userIds.map(user => user.userId)).update({ level: ACTIVITY_LEVEL_UPGRADE_MAP[activityType as keyof typeof ACTIVITY_LEVEL_UPGRADE_MAP] })
+      // Start transaction
+      const trx = await db.transaction()
+      try {
+        if (
+          ACTIVITY_TYPE_SPECIAL.includes(activityType) &&
+          status === ACTIVITY_REGISTRANT_STATUS_ENUM.LULUS_KEGIATAN
+        ) {
+          const userIds = (
+            await ActivityRegistration.query({ client: trx })
+              .select('user_id')
+              .whereIn('id', ids)
+              .paginate(1, ids.length)
+          ).all()
+
+          // Update level
+          await Profile.query({ client: trx })
+            .whereIn(
+              'user_id',
+              userIds.map((user) => user.userId)
+            )
+            .update({
+              level:
+                ACTIVITY_LEVEL_UPGRADE_MAP[activityType as keyof typeof ACTIVITY_LEVEL_UPGRADE_MAP],
+            })
+
+          // Update badges by appending new badge
+          if (activity.badge) {
+            for (const user of userIds) {
+              const profile = await Profile.findByOrFail('user_id', user.userId, { client: trx })
+              const currentBadges = profile.badges as unknown as string[]
+              if (!currentBadges.includes(activity.badge)) {
+                await profile
+                  .merge({
+                    badges: JSON.stringify([...currentBadges, activity.badge]),
+                  })
+                  .save()
+              }
+            }
+          }
+        }
+
+        const affectedRows = await ActivityRegistration.query({ client: trx })
+          .whereIn('id', ids)
+          .update({ status: status })
+
+        // Commit transaction
+        await trx.commit()
+
+        return response.ok({
+          messages: 'UPDATE_DATA_SUCCESS',
+          affected_rows: affectedRows,
+        })
+      } catch (error) {
+        // Rollback transaction on error
+        await trx.rollback()
+        throw error
       }
-
-      const affectedRows = await ActivityRegistration.query()
-        .whereIn('id', ids)
-        .update({ status: status })
-      return response.ok({
-        messages: 'UPDATE_DATA_SUCCESS',
-        affected_rows: affectedRows,
-      })
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
