@@ -10,9 +10,11 @@ export default class AdminusersController {
     try {
       const page = request.qs().page ?? 1
       const perPage = request.qs().per_page ?? 10
+      const search = request.qs().search ?? ''
 
       const permissions = await AdminUser.query()
         .select('*')
+        .where('email', 'like', `%${search}%`)
         .paginate(page, perPage)
 
       return response.ok({
