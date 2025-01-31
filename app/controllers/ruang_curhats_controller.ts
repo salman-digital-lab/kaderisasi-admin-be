@@ -7,12 +7,18 @@ export default class RuangCurhatController {
     try {
       const page = request.qs().page ?? 1
       const perPage = request.qs().per_page ?? 10
+      const status = request.qs().status
 
-      const ruangCurhat = await RuangCurhat.query()
+      let ruangCurhatRaw = RuangCurhat.query()
         .select('*')
         .preload('publicUser')
-        .orderBy('id', 'desc')
-        .paginate(page, perPage)
+        .preload('adminUser')
+
+      if (status) {
+        ruangCurhatRaw = ruangCurhatRaw.where('status', status)
+      }
+
+      const ruangCurhat = await ruangCurhatRaw.orderBy('created_at', 'desc').paginate(page, perPage)
 
       return response.ok({
         messages: 'GET_DATA_SUCCESS',
