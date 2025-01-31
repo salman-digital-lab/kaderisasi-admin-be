@@ -119,3 +119,5 @@ router
       .prefix('cities')
   })
   .prefix('v2')
+
+router.get('health', () => ({ status: 'ok' }))
