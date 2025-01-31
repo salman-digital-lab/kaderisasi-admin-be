@@ -55,6 +55,7 @@ router
     router
       .group(() => {
         router.put('/:id', [ProfilesController, 'update'])
+        router.put('auth/:id', [AuthController, 'updateMember'])
         router.get('/:id', [ProfilesController, 'show'])
         router.get('', [ProfilesController, 'index'])
         router.delete(':id', [ProfilesController, 'delete'])

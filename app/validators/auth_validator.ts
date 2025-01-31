@@ -16,6 +16,13 @@ export const loginValidator = vine.compile(
   })
 )
 
+export const editPublicUserValidator = vine.compile(
+  vine.object({
+    email: vine.string().email().optional(),
+    password: vine.string().optional(),
+  })
+)
+
 export const editPasswordValidator = vine.compile(
   vine.object({
     password: vine.string(),

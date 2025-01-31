@@ -1,8 +1,13 @@
 import { HttpContext } from '@adonisjs/core/http'
 import hash from '@adonisjs/core/services/hash'
 
-import { registerValidator, loginValidator } from '#validators/auth_validator'
+import {
+  registerValidator,
+  loginValidator,
+  editPublicUserValidator,
+} from '#validators/auth_validator'
 import AdminUser from '#models/admin_user'
+import PublicUser from '#models/public_user'
 
 export default class AuthController {
   async register({ request, response }: HttpContext) {
@@ -58,6 +63,38 @@ export default class AuthController {
       return response.ok({
         message: 'LOGIN_SUCCESS',
         data: { user, token },
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async updateMember({ params, request, response }: HttpContext) {
+    const id: string = params.id
+    const payload = await editPublicUserValidator.validate(request.all())
+
+    try {
+      const user = await PublicUser.findBy('id', id)
+      if (!user) {
+        return response.notFound({
+          message: 'USER_NOT_FOUND',
+        })
+      }
+      const exist = await PublicUser.findBy('email', payload.email)
+      if (exist && exist.id !== Number(id)) {
+        return response.conflict({
+          message: 'EMAIL_ALREADY_REGISTERED',
+        })
+      }
+
+      const updated = await user.merge(payload).save()
+
+      return response.ok({
+        message: 'UPDATE_MEMBER_SUCCESS',
+        data: updated,
       })
     } catch (error) {
       return response.internalServerError({
