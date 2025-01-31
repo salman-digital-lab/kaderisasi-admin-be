@@ -27,7 +27,7 @@ router
       .group(() => {
         router.get('', [AdminusersController, 'index'])
         router.get(':id', [AdminusersController, 'show'])
-        router.post(':id', [AdminusersController, 'create'])
+        router.post('', [AdminusersController, 'create'])
         router.put(':id', [AdminusersController, 'update'])
         router.put(':id/password', [AdminusersController, 'editPassword'])
       })

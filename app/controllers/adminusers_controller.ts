@@ -47,6 +47,7 @@ export default class AdminusersController {
         displayName: payload.displayName,
         email: payload.email,
         password: payload.password,
+        role: payload.role,
       })
 
       return response.ok({
@@ -103,10 +104,11 @@ export default class AdminusersController {
   /**
    * Edit individual record
    */
-  async editPassword({ request, response }: HttpContext) {
-    const { password, email } = await editPasswordValidator.validate(request.all())
+  async editPassword({ params, request, response }: HttpContext) {
+    const { password } = await editPasswordValidator.validate(request.all())
     try {
-      const user = await AdminUser.findBy('email', email)
+      const id: number = params.id
+      const user = await AdminUser.findOrFail(id)
 
       if (!user) {
         return response.unauthorized({

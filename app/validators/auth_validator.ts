@@ -5,6 +5,7 @@ export const registerValidator = vine.compile(
     displayName: vine.string(),
     email: vine.string().email(),
     password: vine.string(),
+    role: vine.number(),
   })
 )
 
@@ -18,7 +19,6 @@ export const loginValidator = vine.compile(
 export const editPasswordValidator = vine.compile(
   vine.object({
     password: vine.string(),
-    email: vine.string().email(),
   })
 )
 
