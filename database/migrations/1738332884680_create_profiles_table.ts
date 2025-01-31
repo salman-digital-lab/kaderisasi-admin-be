@@ -10,6 +10,7 @@ export default class extends BaseSchema {
       table.string('name').notNullable()
       table.string('gender', 1)
       table.string('personal_id', 50)
+      table.string('picture')
 
       table.string('whatsapp', 35)
       table.string('line', 50)
