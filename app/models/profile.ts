@@ -19,6 +19,8 @@ export default class Profile extends BaseModel {
   declare publicUser: BelongsTo<typeof PublicUser>
 
   @column()
+  declare picture: string
+  @column()
   declare name: string
 
   @column()
