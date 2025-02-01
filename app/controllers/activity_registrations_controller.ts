@@ -285,7 +285,8 @@ export default class ActivityRegistrationsController {
         // Escape and wrap values that might contain commas
         const escapeCSV = (str: string) => {
           if (!str) return '""'
-          str = str.replace(/"/g, '""') // Escape quotes
+
+          str = str.toString().replace(/"/g, '""') // Escape quotes
           return `"${str}"`
         }
 
