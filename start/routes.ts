@@ -57,6 +57,7 @@ router
         router.put('/:id', [ProfilesController, 'update'])
         router.put('auth/:id', [AuthController, 'updateMember'])
         router.get('/:id', [ProfilesController, 'show'])
+        router.get('user/:id', [ProfilesController, 'showByUserId'])
         router.get('', [ProfilesController, 'index'])
         router.delete(':id', [ProfilesController, 'delete'])
       })

@@ -62,6 +62,29 @@ export default class ProfilesController {
     }
   }
 
+  async showByUserId({ params, response }: HttpContext) {
+    try {
+      const id: number = params.id
+      const profile = await Profile.query()
+        .select('*')
+        .where('user_id', id)
+        .preload('province')
+        .preload('university')
+        .preload('city')
+        .preload('publicUser')
+
+      return response.ok({
+        message: 'GET_DATA_SUCCESS',
+        data: { profile },
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
   async update({ params, request, response }: HttpContext) {
     try {
       const payload = await updateProfileValidator.validate(request.all())
