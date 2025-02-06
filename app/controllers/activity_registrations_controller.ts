@@ -255,13 +255,7 @@ export default class ActivityRegistrationsController {
         'Jenjang',
       ]
 
-      const questions: Array<{
-        label: string
-        name: string
-        type: string
-        required: boolean
-        data?: Array<{ id: number; label: string; value: string }>
-      }> = activity.additionalConfig.additional_questionnaire
+      const questions = activity.additionalConfig.additional_questionnaire
 
       // Add questionnaire headers
       const questionHeaders = questions.map((q) => q.label)
@@ -309,8 +303,10 @@ export default class ActivityRegistrationsController {
         ]
 
         // Add questionnaire answers
-        const answers: { [index: string]: string } = item.questionnaireAnswer
-        const answerValues = Object.values(answers).map((answer) => escapeCSV(answer))
+        const answers = item.questionnaireAnswer
+        const answerValues = Object.values(questions).map((question) =>
+          escapeCSV(answers[question.name])
+        )
 
         // Combine all values and add to CSV content
         const rowData = [...baseData, ...answerValues]
