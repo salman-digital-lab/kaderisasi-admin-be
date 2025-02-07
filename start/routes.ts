@@ -12,6 +12,7 @@ const RuangCurhatController = () => import('#controllers/ruang_curhats_controlle
 const ProvincesController = () => import('#controllers/provinces_controller')
 const CitiesController = () => import('#controllers/cities_controller')
 const DashboardController = () => import('#controllers/dashboard_controller')
+const LeaderboardsController = () => import('#controllers/leaderboards_controller')
 
 router
   .group(() => {
@@ -118,6 +119,15 @@ router
         router.delete(':id', [CitiesController, 'delete']).use(middleware.auth())
       })
       .prefix('cities')
+
+    router
+      .group(() => {
+        router.get('', [LeaderboardsController, 'index'])
+        router.get(':id', [LeaderboardsController, 'show'])
+        router.put(':id', [LeaderboardsController, 'update'])
+      })
+      .prefix('achievements')
+      .use(middleware.auth())
   })
   .prefix('v2')
 
