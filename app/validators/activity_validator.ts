@@ -59,7 +59,7 @@ export const updateActivityValidator = vine.compile(
 export const imageValidator = vine.compile(
   vine.object({
     file: vine.file({
-      size: '2mb',
+      size: '1mb',
       extnames: ['jpg', 'png', 'jpeg', 'PNG', 'JPG', 'JPEG', 'webp', 'WEBP'],
     }),
   })
