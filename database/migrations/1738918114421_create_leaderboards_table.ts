@@ -11,7 +11,7 @@ export default class extends BaseSchema {
       table.integer('user_id').references('public_users.id').onDelete('CASCADE')
 
       table.string('name')
-      table.string('description')
+      table.text('description')
       table.date('achievement_date')
       table.integer('type')
       table.integer('score')
@@ -29,6 +29,10 @@ export default class extends BaseSchema {
       table.increments('id')
       table.integer('user_id').references('public_users.id').onDelete('CASCADE')
       table.date('month')
+
+      table.integer('score_academic')
+      table.integer('score_competency')
+      table.integer('score_organizational')
       table.integer('score')
 
       table.timestamp('created_at')
@@ -38,6 +42,9 @@ export default class extends BaseSchema {
     this.schema.createTable(this.tableName3, (table) => {
       table.increments('id')
       table.integer('user_id').references('public_users.id').onDelete('CASCADE')
+      table.integer('score_academic')
+      table.integer('score_competency')
+      table.integer('score_organizational')
       table.integer('score')
 
       table.timestamp('created_at')

@@ -16,6 +16,15 @@ export default class MonthlyLeaderboard extends BaseModel {
   @column()
   declare score: number
 
+  @column()
+  declare scoreAcademic: number
+
+  @column()
+  declare scoreCompetency: number
+
+  @column()
+  declare scoreOrganizational: number
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
