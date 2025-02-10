@@ -12,6 +12,7 @@ export default class extends BaseSchema {
 
       table.string('name')
       table.string('description')
+      table.date('achievement_date')
       table.integer('type')
       table.integer('score')
       table.string('proof')

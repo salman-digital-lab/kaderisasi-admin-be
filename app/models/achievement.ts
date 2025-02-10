@@ -17,6 +17,9 @@ export default class Achievement extends BaseModel {
   @column()
   declare description: string
 
+  @column.date()
+  declare achievementDate: DateTime
+
   @column()
   declare type: number
 
