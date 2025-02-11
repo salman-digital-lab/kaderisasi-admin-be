@@ -1,8 +1,8 @@
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
-import PublicUser from './public_user.js'
-import AdminUser from './admin_user.js'
+import PublicUser from '#models/public_user'
+import AdminUser from '#models/admin_user'
 
 export default class Achievement extends BaseModel {
   @column({ isPrimary: true })

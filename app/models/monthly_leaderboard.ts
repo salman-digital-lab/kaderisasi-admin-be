@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
-import PublicUser from './public_user.js'
+import PublicUser from '#models/public_user'
 
 export default class MonthlyLeaderboard extends BaseModel {
   @column({ isPrimary: true })
