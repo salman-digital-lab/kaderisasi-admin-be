@@ -125,6 +125,7 @@ router
         router.get('', [LeaderboardsController, 'index'])
         router.get(':id', [LeaderboardsController, 'show'])
         router.put(':id', [LeaderboardsController, 'update'])
+        router.put(':id/approve-reject', [LeaderboardsController, 'approveReject'])
       })
       .prefix('achievements')
       .use(middleware.auth())
