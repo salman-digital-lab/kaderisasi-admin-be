@@ -8,5 +8,6 @@ export const updateAchievementValidator = vine.compile(
     score: vine.number().withoutDecimals().positive().optional(),
     proof: vine.string().optional(),
     status: vine.number().withoutDecimals().optional(),
+    remark: vine.string().optional(),
   })
 ) 

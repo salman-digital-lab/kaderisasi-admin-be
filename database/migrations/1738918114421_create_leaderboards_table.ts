@@ -18,6 +18,7 @@ export default class extends BaseSchema {
       table.string('proof')
       table.integer('status').defaultTo(0)
 
+      table.text('remark')
       table.integer('approver_id').references('admin_users.id').onDelete('CASCADE')
       table.date('approved_at')
 

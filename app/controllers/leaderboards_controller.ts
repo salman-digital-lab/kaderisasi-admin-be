@@ -111,7 +111,7 @@ export default class LeaderboardsController {
   async approveReject({ params, request, response, auth }: HttpContext) {
     try {
       const achievement = await Achievement.findOrFail(params.id)
-      const { status, score } = await request.validateUsing(updateAchievementValidator)
+      const { status, score, remark } = await request.validateUsing(updateAchievementValidator)
 
       if (typeof status !== 'number') {
         return response.badRequest({
@@ -130,6 +130,11 @@ export default class LeaderboardsController {
         // Update score if provided
         if (score !== undefined) {
           achievement.score = score
+        }
+
+        // Add remark if rejecting
+        if (status === 2 && remark) {
+          achievement.remark = remark
         }
         
         await achievement.save()
