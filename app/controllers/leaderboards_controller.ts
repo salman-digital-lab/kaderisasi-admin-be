@@ -7,6 +7,11 @@ import { updateAchievementValidator } from '#validators/achievement_validator'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 
+enum ACHIEVEMENT_TYPE_ENUM {
+  KOMPETENSI,
+  ORGANISASI,
+  AKADEMIK,
+}
 export default class LeaderboardsController {
   /**
    * Get all achievements with optional filters
@@ -163,13 +168,13 @@ export default class LeaderboardsController {
 
           // Update score based on achievement type
           switch (achievement.type) {
-            case 1: // Academic
+            case ACHIEVEMENT_TYPE_ENUM.AKADEMIK: // Academic
               monthlyLeaderboard.scoreAcademic += achievement.score
               break
-            case 2: // Competency
+            case ACHIEVEMENT_TYPE_ENUM.KOMPETENSI: // Competency
               monthlyLeaderboard.scoreCompetency += achievement.score
               break
-            case 3: // Organizational
+            case ACHIEVEMENT_TYPE_ENUM.ORGANISASI: // Organizational
               monthlyLeaderboard.scoreOrganizational += achievement.score
               break
           }
@@ -195,13 +200,13 @@ export default class LeaderboardsController {
 
           // Update score based on achievement type
           switch (achievement.type) {
-            case 1: // Academic
+            case ACHIEVEMENT_TYPE_ENUM.AKADEMIK: // Academic
               lifetimeLeaderboard.scoreAcademic += achievement.score
               break
-            case 2: // Competency
+            case ACHIEVEMENT_TYPE_ENUM.KOMPETENSI: // Competency
               lifetimeLeaderboard.scoreCompetency += achievement.score
               break
-            case 3: // Organizational
+            case ACHIEVEMENT_TYPE_ENUM.ORGANISASI: // Organizational
               lifetimeLeaderboard.scoreOrganizational += achievement.score
               break
           }
