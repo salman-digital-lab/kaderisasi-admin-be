@@ -160,7 +160,7 @@ export default class LeaderboardsController {
             monthlyLeaderboard.month = achievementMonth
             monthlyLeaderboard.score = 0
             monthlyLeaderboard.scoreAcademic = 0
-            monthlyLeaderboard.scoreCompetency = 0
+            monthlyLeaderboard.scoreCompetition = 0
             monthlyLeaderboard.scoreOrganizational = 0
           } else {
             monthlyLeaderboard.useTransaction(trx)
@@ -171,8 +171,8 @@ export default class LeaderboardsController {
             case ACHIEVEMENT_TYPE_ENUM.AKADEMIK: // Academic
               monthlyLeaderboard.scoreAcademic += achievement.score
               break
-            case ACHIEVEMENT_TYPE_ENUM.KOMPETENSI: // Competency
-              monthlyLeaderboard.scoreCompetency += achievement.score
+            case ACHIEVEMENT_TYPE_ENUM.KOMPETENSI: // Competition
+              monthlyLeaderboard.scoreCompetition += achievement.score
               break
             case ACHIEVEMENT_TYPE_ENUM.ORGANISASI: // Organizational
               monthlyLeaderboard.scoreOrganizational += achievement.score
@@ -192,7 +192,7 @@ export default class LeaderboardsController {
             lifetimeLeaderboard.userId = achievement.userId
             lifetimeLeaderboard.score = 0
             lifetimeLeaderboard.scoreAcademic = 0
-            lifetimeLeaderboard.scoreCompetency = 0
+            lifetimeLeaderboard.scoreCompetition = 0
             lifetimeLeaderboard.scoreOrganizational = 0
           } else {
             lifetimeLeaderboard.useTransaction(trx)
@@ -203,8 +203,8 @@ export default class LeaderboardsController {
             case ACHIEVEMENT_TYPE_ENUM.AKADEMIK: // Academic
               lifetimeLeaderboard.scoreAcademic += achievement.score
               break
-            case ACHIEVEMENT_TYPE_ENUM.KOMPETENSI: // Competency
-              lifetimeLeaderboard.scoreCompetency += achievement.score
+            case ACHIEVEMENT_TYPE_ENUM.KOMPETENSI: // Competition
+              lifetimeLeaderboard.scoreCompetition += achievement.score
               break
             case ACHIEVEMENT_TYPE_ENUM.ORGANISASI: // Organizational
               lifetimeLeaderboard.scoreOrganizational += achievement.score

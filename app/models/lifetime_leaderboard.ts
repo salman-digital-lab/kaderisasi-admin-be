@@ -17,7 +17,7 @@ export default class LifetimeLeaderboard extends BaseModel {
   declare scoreAcademic: number
 
   @column()
-  declare scoreCompetency: number
+  declare scoreCompetition: number
 
   @column()
   declare scoreOrganizational: number

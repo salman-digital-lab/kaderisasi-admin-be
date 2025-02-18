@@ -16,6 +16,7 @@ export default class extends BaseSchema {
       table.integer('type')
       table.integer('score')
       table.string('proof')
+      table.boolean('is_proof_deleted').defaultTo(false)
       table.integer('status').defaultTo(0)
 
       table.text('remark')
@@ -32,7 +33,7 @@ export default class extends BaseSchema {
       table.date('month')
 
       table.integer('score_academic')
-      table.integer('score_competency')
+      table.integer('score_competition')
       table.integer('score_organizational')
       table.integer('score')
 
@@ -44,7 +45,7 @@ export default class extends BaseSchema {
       table.increments('id')
       table.integer('user_id').references('public_users.id').onDelete('CASCADE')
       table.integer('score_academic')
-      table.integer('score_competency')
+      table.integer('score_competition')
       table.integer('score_organizational')
       table.integer('score')
 
