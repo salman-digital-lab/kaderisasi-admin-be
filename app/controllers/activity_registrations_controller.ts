@@ -104,7 +104,7 @@ export default class ActivityRegistrationsController {
           ...profileDataField,
           'activity_registrations.status'
         )
-        .orderBy('activity_registrations.id', 'desc')
+        .orderBy('profiles.name', 'asc')
         .paginate(page, perPage)
 
       return response.ok({
