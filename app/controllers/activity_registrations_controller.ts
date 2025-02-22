@@ -39,7 +39,7 @@ export default class ActivityRegistrationsController {
         })
       }
       const registration = await ActivityRegistration.create({
-        userId: payload.user_id,
+        userId: userData.userId,
         activityId: activity.id,
         status: 'TERDAFTAR',
         questionnaireAnswer: payload.questionnaire_answer,
