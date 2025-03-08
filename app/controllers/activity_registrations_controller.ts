@@ -199,7 +199,7 @@ export default class ActivityRegistrationsController {
     const activityId = params.id
     const payload = await updateActivityRegistrationsByEmail.validate(request.all())
     const status: string = payload.status
-    
+
     try {
       // Get activity to check activity type
       const activity = await Activity.findOrFail(activityId)
@@ -207,32 +207,32 @@ export default class ActivityRegistrationsController {
 
       // Start transaction
       const trx = await db.transaction()
-      
+
       try {
         // Get user_ids from the emails
         const users = await PublicUser.query({ client: trx })
           .whereIn('email', payload.emails)
           .select('id')
-        
+
         if (users.length === 0) {
           return response.notFound({
             message: 'NO_USERS_FOUND',
           })
         }
-        
-        const userIds = users.map(user => user.id)
-        
+
+        const userIds = users.map((user) => user.id)
+
         // Get registrations for these users in this activity
         const registrations = await ActivityRegistration.query({ client: trx })
           .whereIn('user_id', userIds)
           .where('activity_id', activityId)
-        
+
         if (registrations.length === 0) {
           return response.notFound({
             message: 'NO_REGISTRATIONS_FOUND',
           })
         }
-        
+
         // Special logic for activity types that upgrade user level
         if (
           ACTIVITY_TYPE_SPECIAL.includes(activityType) &&
@@ -261,16 +261,16 @@ export default class ActivityRegistrationsController {
             }
           }
         }
-        
+
         // Update the status for all matching registrations
         const affectedRows = await ActivityRegistration.query({ client: trx })
           .whereIn('user_id', userIds)
           .where('activity_id', activityId)
           .update({ status: payload.status })
-        
+
         // Commit transaction
         await trx.commit()
-        
+
         return response.ok({
           messages: 'UPDATE_DATA_SUCCESS',
           affected_rows: affectedRows,
@@ -350,14 +350,34 @@ export default class ActivityRegistrationsController {
         'Jenjang',
       ]
 
+      // Improved CSV escaping function that handles all Excel edge cases
+      const escapeCSV = (str: string | number | null | undefined) => {
+        if (str === null || str === undefined) return '""'
+        
+        str = String(str)
+        
+        // Check if the string contains any characters that would require escaping
+        if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+          // Replace double quotes with two double quotes (Excel standard)
+          str = str.replace(/"/g, '""')
+          // Wrap in quotes
+          return `"${str}"`
+        }
+        
+        return str === '' ? '""' : str
+      }
+
       const questions = activity.additionalConfig.additional_questionnaire
 
       // Add questionnaire headers
       const questionHeaders = questions.map((q) => q.label)
-      const allHeaders = [...baseHeaders, ...questionHeaders]
+      
+      // Escape all headers properly
+      const allHeadersEscaped = [...baseHeaders, ...questionHeaders].map(header => escapeCSV(header))
 
-      // Start building CSV content
-      let csvContent = allHeaders.join(',') + '\n'
+      // Start building CSV content with UTF-8 BOM for Excel compatibility
+      // The BOM (Byte Order Mark) helps Excel identify the file as UTF-8
+      let csvContent = '\ufeff' + allHeadersEscaped.join(',') + '\r\n'
 
       // Process each registration
       for (let [i, item] of registrations.entries()) {
@@ -370,14 +390,6 @@ export default class ActivityRegistrationsController {
 
         const provinceName = profile.province ? profile.province.name : ''
         const universityName = profile.university ? profile.university.name : ''
-
-        // Escape and wrap values that might contain commas
-        const escapeCSV = (str: string) => {
-          if (!str) return '""'
-
-          str = str.toString().replace(/"/g, '""') // Escape quotes
-          return `"${str}"`
-        }
 
         const baseData = [
           i + 1,
@@ -393,8 +405,8 @@ export default class ActivityRegistrationsController {
           escapeCSV(provinceName),
           escapeCSV(universityName),
           escapeCSV(profile.major),
-          profile.intakeYear,
-          profile.level,
+          escapeCSV(profile.intakeYear),
+          escapeCSV(profile.level),
         ]
 
         // Add questionnaire answers
@@ -403,18 +415,18 @@ export default class ActivityRegistrationsController {
           escapeCSV(answers[question.name])
         )
 
-        // Combine all values and add to CSV content
+        // Combine all values and add to CSV content with Windows line endings for Excel
         const rowData = [...baseData, ...answerValues]
-        csvContent += rowData.join(',') + '\n'
+        csvContent += rowData.join(',') + '\r\n'
       }
 
+      // Use the correct content type and filename for Excel compatibility
+      const sanitizedFileName = activity.name.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+      
       return response
         .status(200)
-        .safeHeader('Content-type', 'text/csv')
-        .safeHeader(
-          'Content-Disposition',
-          `attachment; filename=${activity.name.replace(/ /g, '-')}.csv`
-        )
+        .safeHeader('Content-type', 'text/csv; charset=utf-8')
+        .safeHeader('Content-Disposition', `attachment; filename="${sanitizedFileName}.csv"`)
         .send(csvContent)
     } catch (error) {
       return response.internalServerError({
