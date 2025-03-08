@@ -86,3 +86,10 @@ export const bulkUpdateActivityRegistrations = vine.compile(
     new_status: vine.string(),
   })
 )
+
+export const updateActivityRegistrationsByEmail = vine.compile(
+  vine.object({
+    emails: vine.array(vine.string().email()),
+    status: vine.string(),
+  })
+)

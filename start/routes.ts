@@ -75,6 +75,7 @@ router
         router.put(':id/delete-image', [ActivitiesController, 'deleteImage'])
         router.get(':id/registrations', [ActivityRegistrationsController, 'index'])
         router.get(':id/registrations-export/', [ActivityRegistrationsController, 'export'])
+        router.put(':id/registrations/status-by-email', [ActivityRegistrationsController, 'updateStatusByListOfEmail'])
         router.put(':id/registrations', [ActivityRegistrationsController, 'updateStatusBulk'])
         router.post(':id/registrations', [ActivityRegistrationsController, 'store'])
       })

@@ -7,6 +7,7 @@ import {
   updateActivityRegistrations,
   bulkUpdateActivityRegistrations,
   storeActivityRegistration,
+  updateActivityRegistrationsByEmail,
 } from '#validators/activity_validator'
 
 import { ACTIVITY_REGISTRANT_STATUS_ENUM } from '../../types/constants/activity.js'
@@ -14,6 +15,7 @@ import {
   ACTIVITY_LEVEL_UPGRADE_MAP,
   ACTIVITY_TYPE_SPECIAL,
 } from '../constants/activity_registration.js'
+import PublicUser from '#models/public_user'
 
 export default class ActivityRegistrationsController {
   async store({ params, request, response }: HttpContext) {
@@ -176,6 +178,99 @@ export default class ActivityRegistrationsController {
         // Commit transaction
         await trx.commit()
 
+        return response.ok({
+          messages: 'UPDATE_DATA_SUCCESS',
+          affected_rows: affectedRows,
+        })
+      } catch (error) {
+        // Rollback transaction on error
+        await trx.rollback()
+        throw error
+      }
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async updateStatusByListOfEmail({ params, request, response }: HttpContext) {
+    const activityId = params.id
+    const payload = await updateActivityRegistrationsByEmail.validate(request.all())
+    const status: string = payload.status
+    
+    try {
+      // Get activity to check activity type
+      const activity = await Activity.findOrFail(activityId)
+      const { activityType } = activity
+
+      // Start transaction
+      const trx = await db.transaction()
+      
+      try {
+        // Get user_ids from the emails
+        const users = await PublicUser.query({ client: trx })
+          .whereIn('email', payload.emails)
+          .select('id')
+        
+        if (users.length === 0) {
+          return response.notFound({
+            message: 'NO_USERS_FOUND',
+          })
+        }
+        
+        const userIds = users.map(user => user.id)
+        
+        // Get registrations for these users in this activity
+        const registrations = await ActivityRegistration.query({ client: trx })
+          .whereIn('user_id', userIds)
+          .where('activity_id', activityId)
+        
+        if (registrations.length === 0) {
+          return response.notFound({
+            message: 'NO_REGISTRATIONS_FOUND',
+          })
+        }
+        
+        // Special logic for activity types that upgrade user level
+        if (
+          ACTIVITY_TYPE_SPECIAL.includes(activityType) &&
+          status === ACTIVITY_REGISTRANT_STATUS_ENUM.LULUS_KEGIATAN
+        ) {
+          // Update level
+          await Profile.query({ client: trx })
+            .whereIn('user_id', userIds)
+            .update({
+              level:
+                ACTIVITY_LEVEL_UPGRADE_MAP[activityType as keyof typeof ACTIVITY_LEVEL_UPGRADE_MAP],
+            })
+
+          // Update badges by appending new badge
+          if (activity.badge) {
+            for (const userId of userIds) {
+              const profile = await Profile.findByOrFail('user_id', userId, { client: trx })
+              const currentBadges = profile.badges as unknown as string[]
+              if (!currentBadges.includes(activity.badge)) {
+                await profile
+                  .merge({
+                    badges: JSON.stringify([...currentBadges, activity.badge]),
+                  })
+                  .save()
+              }
+            }
+          }
+        }
+        
+        // Update the status for all matching registrations
+        const affectedRows = await ActivityRegistration.query({ client: trx })
+          .whereIn('user_id', userIds)
+          .where('activity_id', activityId)
+          .update({ status: payload.status })
+        
+        // Commit transaction
+        await trx.commit()
+        
         return response.ok({
           messages: 'UPDATE_DATA_SUCCESS',
           affected_rows: affectedRows,
