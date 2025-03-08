@@ -23,7 +23,7 @@ export default class ActivityRegistrationsController {
       const userData = await Profile.findOrFail(payload.user_id)
       const activity = await Activity.findOrFail(activityId)
       const registered = await ActivityRegistration.query().where({
-        user_id: payload.user_id,
+        user_id: userData.userId,
         activity_id: activity.id,
       })
 
