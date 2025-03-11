@@ -29,10 +29,13 @@ export default class ProfilesController {
 
       if (badge) {
         // Use LIKE for fuzzy search within the JSON array
-        query = query.whereRaw(`EXISTS (
+        query = query.whereRaw(
+          `EXISTS (
           SELECT 1 FROM jsonb_array_elements_text(badges) badge 
           WHERE badge ILIKE ?
-        )`, [`%${badge}%`])
+        )`,
+          [`%${badge}%`]
+        )
       }
 
       const profiles = await query.paginate(page, perPage)
@@ -99,7 +102,7 @@ export default class ProfilesController {
     try {
       const payload = await updateProfileValidator.validate(request.all())
       const id: number = params.id
-      const profile = await Profile.findByOrFail('user_id', id)
+      const profile = await Profile.findOrFail(id)
       if (payload.password) {
         const user = await PublicUser.find(profile.userId)
         user?.merge({ password: payload.password }).save()
@@ -122,7 +125,7 @@ export default class ProfilesController {
   async delete({ params, response }: HttpContext) {
     const id = params.id
     try {
-      const profile = await Profile.findBy('user_id', id)
+      const profile = await Profile.findOrFail(id)
       if (!profile) {
         return response.ok({
           message: 'PROFILE_NOT_FOUND',
