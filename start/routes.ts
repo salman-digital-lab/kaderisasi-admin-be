@@ -86,6 +86,7 @@ router
       .group(() => {
         router.put('', [ActivityRegistrationsController, 'updateStatus'])
         router.get('/:id', [ActivityRegistrationsController, 'show'])
+        router.get('/user/:id', [ActivityRegistrationsController, 'getActivityByUserId'])
         router.delete(':id', [ActivityRegistrationsController, 'delete'])
       })
       .prefix('activity-registrations')

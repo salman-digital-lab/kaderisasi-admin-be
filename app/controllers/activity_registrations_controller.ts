@@ -121,6 +121,26 @@ export default class ActivityRegistrationsController {
     }
   }
 
+  async getActivityByUserId({ response, params }: HttpContext) {
+    try {
+      const id = params.id
+      const activities = await ActivityRegistration.query()
+        .select('*')
+        .where('user_id', id)
+        .preload('activity')
+
+      return response.ok({
+        message: 'GET_DATA_SUCCESS',
+        data: activities,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.stack,
+      })
+    }
+  }
+
   async updateStatus({ request, response }: HttpContext) {
     const payload = await updateActivityRegistrations.validate(request.all())
     const status: string = payload.status
