@@ -4,6 +4,7 @@ export const clubValidator = vine.compile(
   vine.object({
     name: vine.string(),
     description: vine.string().optional(),
+    short_description: vine.string().maxLength(200).optional(),
     logo: vine.string().optional(),
     media: vine
       .object({
@@ -27,6 +28,7 @@ export const updateClubValidator = vine.compile(
   vine.object({
     name: vine.string().optional(),
     description: vine.string().optional(),
+    short_description: vine.string().maxLength(200).optional(),
     logo: vine.string().optional(),
     media: vine
       .object({

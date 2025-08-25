@@ -20,7 +20,18 @@ export default class ClubsController {
 
       const clubs = await Club.query()
         .where('name', 'ILIKE', search ? '%' + search + '%' : '%%')
-        .select('id', 'name', 'description', 'logo', 'created_at', 'updated_at')
+        .select(
+          'id',
+          'name',
+          'description',
+          'short_description',
+          'logo',
+          'created_at',
+          'updated_at',
+          'start_period',
+          'end_period',
+          'is_show'
+        )
         .orderBy('createdAt', 'desc')
         .paginate(page, perPage)
 
@@ -66,6 +77,7 @@ export default class ClubsController {
       const createData = {
         name: payload.name,
         description: payload.description,
+        shortDescription: payload.short_description,
         media: payload.media || { items: [] },
         startPeriod: payload.start_period ? DateTime.fromJSDate(payload.start_period) : null,
         endPeriod: payload.end_period ? DateTime.fromJSDate(payload.end_period) : null,
@@ -94,12 +106,16 @@ export default class ClubsController {
 
       // Convert snake_case to camelCase and handle date conversion
       const updateData: any = {}
-      
+
       if (payload.name !== undefined) updateData.name = payload.name
       if (payload.description !== undefined) updateData.description = payload.description
+      if (payload.short_description !== undefined)
+        updateData.shortDescription = payload.short_description
       if (payload.media !== undefined) updateData.media = payload.media
       if (payload.start_period !== undefined) {
-        updateData.startPeriod = payload.start_period ? DateTime.fromJSDate(payload.start_period) : null
+        updateData.startPeriod = payload.start_period
+          ? DateTime.fromJSDate(payload.start_period)
+          : null
       }
       if (payload.end_period !== undefined) {
         updateData.endPeriod = payload.end_period ? DateTime.fromJSDate(payload.end_period) : null
@@ -119,8 +135,6 @@ export default class ClubsController {
       })
     }
   }
-
-
 
   async uploadLogo({ request, params, response }: HttpContext) {
     const payload = await request.validateUsing(logoValidator)
@@ -180,7 +194,7 @@ export default class ClubsController {
       if (club.media && club.media.items && Array.isArray(club.media.items)) {
         currentItems = [...club.media.items]
       }
-      
+
       // Add new media item
       currentItems.push({
         media_url: `club/${fileName}`,
@@ -218,13 +232,13 @@ export default class ClubsController {
       // Extract YouTube video ID from URL and create embed URL
       const youtubeUrl = payload.media_url
       let videoId = ''
-      
+
       // Handle different YouTube URL formats
       const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-        /youtube\.com\/watch\?.*v=([^&\n?#]+)/
+        /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
       ]
-      
+
       for (const pattern of patterns) {
         const match = youtubeUrl.match(pattern)
         if (match) {
@@ -246,7 +260,7 @@ export default class ClubsController {
       if (club.media && club.media.items && Array.isArray(club.media.items)) {
         currentItems = [...club.media.items]
       }
-      
+
       // Add new media item
       currentItems.push({
         media_url: embedUrl,
@@ -278,7 +292,12 @@ export default class ClubsController {
     try {
       const club = await Club.findOrFail(clubId)
 
-      if (!club.media || !club.media.items || !Array.isArray(club.media.items) || club.media.items.length === 0) {
+      if (
+        !club.media ||
+        !club.media.items ||
+        !Array.isArray(club.media.items) ||
+        club.media.items.length === 0
+      ) {
         return response.notFound({
           message: 'MEDIA_NOT_FOUND',
         })
@@ -302,9 +321,9 @@ export default class ClubsController {
       // Create a copy of the media items array and remove the item
       const currentItems = [...club.media.items]
       currentItems.splice(index, 1)
-      
+
       const newMediaStructure = { items: currentItems }
-      
+
       // Update the club with new media structure
       await club.merge({ media: newMediaStructure }).save()
 
