@@ -8,6 +8,7 @@ export default class extends BaseSchema {
       table.increments('id')
       table.string('name').notNullable()
       table.text('description')
+      table.string('short_description', 200).nullable()
       table.string('logo').nullable()
       table.jsonb('media').defaultTo(JSON.stringify({ items: [] }))
       table.date('start_period').nullable()
