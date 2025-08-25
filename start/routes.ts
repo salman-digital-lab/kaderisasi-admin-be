@@ -13,6 +13,7 @@ const ProvincesController = () => import('#controllers/provinces_controller')
 const CitiesController = () => import('#controllers/cities_controller')
 const DashboardController = () => import('#controllers/dashboard_controller')
 const LeaderboardsController = () => import('#controllers/leaderboards_controller')
+const ClubsController = () => import('#controllers/clubs_controller')
 
 router
   .group(() => {
@@ -130,6 +131,20 @@ router
         router.put(':id/approve-reject', [LeaderboardsController, 'approveReject'])
       })
       .prefix('achievements')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.get('', [ClubsController, 'index'])
+        router.get(':id', [ClubsController, 'show'])
+        router.post('', [ClubsController, 'store'])
+        router.put(':id', [ClubsController, 'update'])
+        router.post(':id/logo', [ClubsController, 'uploadLogo'])
+        router.post(':id/media/image', [ClubsController, 'uploadImageMedia'])
+        router.post(':id/media/youtube', [ClubsController, 'addYoutubeMedia'])
+        router.put(':id/delete-media', [ClubsController, 'deleteMedia'])
+      })
+      .prefix('clubs')
       .use(middleware.auth())
   })
   .prefix('v2')
