@@ -10,6 +10,7 @@ import {
   imageMediaValidator,
   youtubeMediaValidator,
 } from '#validators/club_validator'
+import { updateClubRegistrationInfoValidator } from '#validators/club_registration_validator'
 
 export default class ClubsController {
   async index({ request, response }: HttpContext) {
@@ -121,6 +122,12 @@ export default class ClubsController {
         updateData.endPeriod = payload.end_period ? DateTime.fromJSDate(payload.end_period) : null
       }
       if (payload.is_show !== undefined) updateData.isShow = payload.is_show
+      if (payload.is_registration_open !== undefined) updateData.isRegistrationOpen = payload.is_registration_open
+      if (payload.registration_end_date !== undefined) {
+        updateData.registrationEndDate = payload.registration_end_date
+          ? DateTime.fromJSDate(payload.registration_end_date)
+          : null
+      }
 
       const updated = await clubData.merge(updateData).save()
 
@@ -330,6 +337,32 @@ export default class ClubsController {
       return response.ok({
         message: 'DELETE_MEDIA_SUCCESS',
         data: { media: newMediaStructure },
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async updateRegistrationInfo({ params, request, response }: HttpContext) {
+    try {
+      const clubId = params.id
+      const payload = await updateClubRegistrationInfoValidator.validate(request.all())
+
+      const club = await Club.findOrFail(clubId)
+
+      const registrationInfo = {
+        registration_info: payload.registration_info || "",
+        after_registration_info: payload.after_registration_info || "",
+      }
+
+      await club.merge({ registrationInfo }).save()
+
+      return response.ok({
+        message: 'REGISTRATION_INFO_UPDATED',
+        data: { registration_info: registrationInfo },
       })
     } catch (error) {
       return response.internalServerError({

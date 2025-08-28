@@ -1,5 +1,7 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
+import ClubRegistration from '#models/club_registration'
+import type { HasMany } from '@adonisjs/lucid/types/relations'
 
 export type MediaItem = {
   media_url: string
@@ -9,6 +11,11 @@ export type MediaItem = {
 
 export type MediaStructure = {
   items: MediaItem[]
+}
+
+export type RegistrationInfoStructure = {
+  registration_info: string
+  after_registration_info: string
 }
 
 export default class Club extends BaseModel {
@@ -30,6 +37,14 @@ export default class Club extends BaseModel {
   @column()
   declare media: MediaStructure
 
+  @column()
+  declare registrationInfo: RegistrationInfoStructure
+
+  @hasMany(() => ClubRegistration, {
+    foreignKey: 'clubId',
+  })
+  declare registrations: HasMany<typeof ClubRegistration>
+
   @column.date()
   declare startPeriod: DateTime | null
 
@@ -38,6 +53,12 @@ export default class Club extends BaseModel {
 
   @column()
   declare isShow: boolean
+
+  @column()
+  declare isRegistrationOpen: boolean
+
+  @column.date()
+  declare registrationEndDate: DateTime | null
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

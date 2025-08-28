@@ -14,6 +14,7 @@ const CitiesController = () => import('#controllers/cities_controller')
 const DashboardController = () => import('#controllers/dashboard_controller')
 const LeaderboardsController = () => import('#controllers/leaderboards_controller')
 const ClubsController = () => import('#controllers/clubs_controller')
+const ClubRegistrationsController = () => import('#controllers/club_registrations_controller')
 
 router
   .group(() => {
@@ -143,8 +144,24 @@ router
         router.post(':id/media/image', [ClubsController, 'uploadImageMedia'])
         router.post(':id/media/youtube', [ClubsController, 'addYoutubeMedia'])
         router.put(':id/delete-media', [ClubsController, 'deleteMedia'])
+        router.put(':id/registration-info', [ClubsController, 'updateRegistrationInfo'])
+        
+        // Club registrations management
+        router.get(':id/registrations', [ClubRegistrationsController, 'index'])
+        router.post(':id/registrations', [ClubRegistrationsController, 'store'])
+        router.get(':id/registrations/export', [ClubRegistrationsController, 'export'])
       })
       .prefix('clubs')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.put('bulk-update', [ClubRegistrationsController, 'bulkUpdate'])
+        router.get(':id', [ClubRegistrationsController, 'show'])
+        router.put(':id', [ClubRegistrationsController, 'update'])
+        router.delete(':id', [ClubRegistrationsController, 'delete'])
+      })
+      .prefix('club-registrations')
       .use(middleware.auth())
   })
   .prefix('v2')

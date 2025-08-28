@@ -21,6 +21,8 @@ export const clubValidator = vine.compile(
     start_period: vine.date().optional(),
     end_period: vine.date().optional(),
     is_show: vine.boolean().optional(),
+    is_registration_open: vine.boolean().optional(),
+    registration_end_date: vine.date().optional(),
   })
 )
 
@@ -45,6 +47,8 @@ export const updateClubValidator = vine.compile(
     start_period: vine.date().optional(),
     end_period: vine.date().optional(),
     is_show: vine.boolean().optional(),
+    is_registration_open: vine.boolean().optional(),
+    registration_end_date: vine.date().optional(),
   })
 )
 
