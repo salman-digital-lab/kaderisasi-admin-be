@@ -216,4 +216,113 @@ export default class CustomFormsController {
       })
     }
   }
+
+  async getUnattachedForms({ request, response }: HttpContext) {
+    try {
+      const page = request.qs().page ?? 1
+      const perPage = request.qs().per_page ?? 10
+      const search = request.qs().search
+
+      const query = CustomForm.query()
+        .whereNull('featureId')
+
+      // Apply search filter
+      if (search) {
+        query.where('formName', 'ILIKE', `%${search}%`)
+      }
+
+      const unattachedForms = await query
+        .orderBy('createdAt', 'desc')
+        .paginate(page, perPage)
+
+      return response.ok({
+        message: 'GET_UNATTACHED_FORMS_SUCCESS',
+        data: unattachedForms,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async attachToClub({ params, request, response }: HttpContext) {
+    try {
+      const formId: number = params.id
+      const { clubId } = request.all()
+
+      if (!clubId) {
+        return response.badRequest({
+          message: 'CLUB_ID_REQUIRED',
+        })
+      }
+
+      const customForm = await CustomForm.find(formId)
+
+      if (!customForm) {
+        return response.notFound({
+          message: 'CUSTOM_FORM_NOT_FOUND',
+        })
+      }
+
+      // Check if the form is already attached to something
+      if (customForm.featureId) {
+        return response.badRequest({
+          message: 'FORM_ALREADY_ATTACHED',
+        })
+      }
+
+      // Attach the form to the club
+      customForm.featureType = 'club_registration'
+      customForm.featureId = clubId
+      await customForm.save()
+
+      return response.ok({
+        message: 'FORM_ATTACHED_TO_CLUB_SUCCESS',
+        data: customForm,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async detachFromClub({ params, response }: HttpContext) {
+    try {
+      const formId: number = params.id
+
+      const customForm = await CustomForm.find(formId)
+
+      if (!customForm) {
+        return response.notFound({
+          message: 'CUSTOM_FORM_NOT_FOUND',
+        })
+      }
+
+      // Detach the form from any feature by setting featureId to null
+      // Note: We'll use a raw query since Lucid ORM doesn't handle null values well for updates
+      await CustomForm.query()
+        .where('id', formId)
+        .update({
+          featureId: null,
+          updatedAt: new Date()
+        })
+
+      // Fetch the updated form
+      const updatedForm = await CustomForm.find(formId)
+
+      return response.ok({
+        message: 'FORM_DETACHED_FROM_CLUB_SUCCESS',
+        data: updatedForm,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
 }

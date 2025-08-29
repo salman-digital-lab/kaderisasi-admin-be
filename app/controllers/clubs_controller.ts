@@ -59,9 +59,21 @@ export default class ClubsController {
         })
       }
 
+      // Get attached custom form if any
+      const CustomForm = (await import('#models/custom_form')).default
+      const attachedForm = await CustomForm.query()
+        .where('featureType', 'club_registration')
+        .where('featureId', id)
+        .first()
+
+      const clubWithForm = {
+        ...clubData.toJSON(),
+        attachedCustomForm: attachedForm,
+      }
+
       return response.ok({
         message: 'GET_DATA_SUCCESS',
-        data: clubData,
+        data: clubWithForm,
       })
     } catch (error) {
       return response.internalServerError({

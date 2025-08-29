@@ -169,9 +169,12 @@ router
       .group(() => {
         router.get('', [CustomFormsController, 'index'])
         router.get('by-feature', [CustomFormsController, 'getByFeature'])
+        router.get('unattached', [CustomFormsController, 'getUnattachedForms'])
         router.get(':id', [CustomFormsController, 'show'])
         router.post('', [CustomFormsController, 'store'])
         router.put(':id', [CustomFormsController, 'update'])
+        router.put(':id/attach-club', [CustomFormsController, 'attachToClub'])
+        router.put(':id/detach-club', [CustomFormsController, 'detachFromClub'])
         router.delete(':id', [CustomFormsController, 'destroy'])
         router.put(':id/toggle-active', [CustomFormsController, 'toggleActive'])
       })
