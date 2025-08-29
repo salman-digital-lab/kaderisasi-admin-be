@@ -15,6 +15,7 @@ const DashboardController = () => import('#controllers/dashboard_controller')
 const LeaderboardsController = () => import('#controllers/leaderboards_controller')
 const ClubsController = () => import('#controllers/clubs_controller')
 const ClubRegistrationsController = () => import('#controllers/club_registrations_controller')
+const CustomFormsController = () => import('#controllers/custom_forms_controller')
 
 router
   .group(() => {
@@ -162,6 +163,19 @@ router
         router.delete(':id', [ClubRegistrationsController, 'delete'])
       })
       .prefix('club-registrations')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.get('', [CustomFormsController, 'index'])
+        router.get('by-feature', [CustomFormsController, 'getByFeature'])
+        router.get(':id', [CustomFormsController, 'show'])
+        router.post('', [CustomFormsController, 'store'])
+        router.put(':id', [CustomFormsController, 'update'])
+        router.delete(':id', [CustomFormsController, 'destroy'])
+        router.put(':id/toggle-active', [CustomFormsController, 'toggleActive'])
+      })
+      .prefix('custom-forms')
       .use(middleware.auth())
   })
   .prefix('v2')
