@@ -33,7 +33,8 @@ export default class ClubsController {
           'end_period',
           'is_show'
         )
-        .orderBy('createdAt', 'desc')
+        .orderBy('is_show', 'desc')
+        .orderBy('created_at', 'desc')
         .paginate(page, perPage)
 
       return response.ok({
