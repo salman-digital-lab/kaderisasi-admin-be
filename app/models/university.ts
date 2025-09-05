@@ -9,6 +9,9 @@ export default class University extends BaseModel {
   @column()
   declare name: string
 
+  @column()
+  declare provinceId: number | null
+
   @belongsTo(() => Province, {
     foreignKey: 'provinceId',
   })

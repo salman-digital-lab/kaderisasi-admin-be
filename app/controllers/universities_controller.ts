@@ -11,6 +11,7 @@ export default class UniversitiesController {
 
       const universities = await University.query()
         .select('*')
+        .preload('province')
         .where('name', 'ILIKE', search ? '%' + search + '%' : '%%')
         .orderBy('name', 'asc')
         .paginate(page, perPage)
@@ -30,7 +31,7 @@ export default class UniversitiesController {
   async show({ params, response }: HttpContext) {
     try {
       const id: number = params.id
-      const university = await University.findOrFail(id)
+      const university = await University.query().where('id', id).preload('province').firstOrFail()
 
       return response.ok({
         message: 'GET_DATA_SUCCESS',
@@ -45,9 +46,12 @@ export default class UniversitiesController {
   }
 
   async store({ request, response }: HttpContext) {
-    const { name } = await UniversityValidator.validate(request.all())
+    const { name, provinceId } = await UniversityValidator.validate(request.all())
     try {
-      const university = await University.create({ name: name })
+      const university = await University.create({
+        name: name,
+        provinceId: provinceId
+      })
 
       return response.ok({
         message: 'CREATE_DATA_SUCCESS',
@@ -62,11 +66,14 @@ export default class UniversitiesController {
   }
 
   async update({ params, request, response }: HttpContext) {
-    const { name } = await UniversityValidator.validate(request.all())
+    const { name, provinceId } = await UniversityValidator.validate(request.all())
     try {
       const id: number = params.id
       const university = await University.findOrFail(id)
-      const updated = await university.merge({ name: name }).save()
+      const updated = await university.merge({
+        name: name,
+        provinceId: provinceId
+      }).save()
 
       return response.ok({
         message: 'UPDATE_DATA_SUCCESS',
