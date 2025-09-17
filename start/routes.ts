@@ -137,6 +137,14 @@ router
 
     router
       .group(() => {
+        router.get('monthly', [LeaderboardsController, 'monthlyLeaderboard'])
+        router.get('lifetime', [LeaderboardsController, 'lifetimeLeaderboard'])
+      })
+      .prefix('leaderboards')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
         router.get('', [ClubsController, 'index'])
         router.get(':id', [ClubsController, 'show'])
         router.post('', [ClubsController, 'store'])

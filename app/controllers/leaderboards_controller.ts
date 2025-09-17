@@ -17,10 +17,14 @@ export default class LeaderboardsController {
    * Get all achievements with optional filters
    */
   async index({ request, response }: HttpContext) {
-    const { page = 1, per_page: perPage = 10, status, email, type } = request.qs()
+    const { page = 1, per_page: perPage = 10, status, email, type, name } = request.qs()
 
     try {
-      const query = Achievement.query().preload('user').preload('approver')
+      const query = Achievement.query()
+        .preload('user', (userQuery) => {
+          userQuery.preload('profile')
+        })
+        .preload('approver')
 
       if (status !== undefined) {
         query.where('status', status)
@@ -28,6 +32,13 @@ export default class LeaderboardsController {
       if (email) {
         query.whereHas('user', (userQuery) => {
           userQuery.where('email', email)
+        })
+      }
+      if (name) {
+        query.whereHas('user', (userQuery) => {
+          userQuery.whereHas('profile', (profileQuery) => {
+            profileQuery.whereILike('name', `%${name}%`)
+          })
         })
       }
       if (type !== undefined) {
@@ -105,6 +116,108 @@ export default class LeaderboardsController {
     } catch (error) {
       return response.notFound({
         message: 'ACHIEVEMENT_NOT_FOUND',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Get monthly leaderboard
+   */
+  async monthlyLeaderboard({ request, response }: HttpContext) {
+    const { page = 1, per_page: perPage = 10, month, year, email, name } = request.qs()
+
+    try {
+      const query = MonthlyLeaderboard.query().preload('user', (userQuery) => {
+        userQuery.preload('profile', (profileQuery) => {
+          profileQuery.preload('university')
+        })
+      })
+
+      // Filter by month and year if provided
+      if (month && year) {
+        const targetMonth = DateTime.fromObject({ year: parseInt(year), month: parseInt(month) }).startOf('month')
+        query.where('month', targetMonth.toSQLDate()!)
+      } else if (year) {
+        const startOfYear = DateTime.fromObject({ year: parseInt(year) }).startOf('year')
+        const endOfYear = DateTime.fromObject({ year: parseInt(year) }).endOf('year')
+        query.whereBetween('month', [startOfYear.toSQLDate()!, endOfYear.toSQLDate()!])
+      }
+
+      // Filter by email if provided
+      if (email) {
+        query.whereHas('user', (userQuery) => {
+          userQuery.where('email', 'ILIKE', `%${email}%`)
+        })
+      }
+
+      // Filter by name if provided
+      if (name) {
+        query.whereHas('user', (userQuery) => {
+          userQuery.whereHas('profile', (profileQuery) => {
+            profileQuery.where('name', 'ILIKE', `%${name}%`)
+          })
+        })
+      }
+
+      // Order by total score descending
+      query.orderBy('score', 'desc')
+
+      const leaderboard = await query.paginate(page, perPage)
+      
+      return response.ok({
+        message: 'GET_DATA_SUCCESS',
+        data: leaderboard,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Get lifetime leaderboard
+   */
+  async lifetimeLeaderboard({ request, response }: HttpContext) {
+    const { page = 1, per_page: perPage = 10, email, name } = request.qs()
+
+    try {
+      const query = LifetimeLeaderboard.query()
+        .preload('user', (userQuery) => {
+          userQuery.preload('profile', (profileQuery) => {
+            profileQuery.preload('university')
+          })
+        })
+
+      // Filter by email if provided
+      if (email) {
+        query.whereHas('user', (userQuery) => {
+          userQuery.where('email', 'ILIKE', `%${email}%`)
+        })
+      }
+
+      // Filter by name if provided
+      if (name) {
+        query.whereHas('user', (userQuery) => {
+          userQuery.whereHas('profile', (profileQuery) => {
+            profileQuery.where('name', 'ILIKE', `%${name}%`)
+          })
+        })
+      }
+
+      query.orderBy('score', 'desc')
+
+      const leaderboard = await query.paginate(page, perPage)
+      
+      return response.ok({
+        message: 'GET_DATA_SUCCESS',
+        data: leaderboard,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
         error: error.message,
       })
     }
