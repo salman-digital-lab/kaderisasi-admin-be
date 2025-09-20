@@ -8,14 +8,26 @@ export default class RuangCurhatController {
       const page = request.qs().page ?? 1
       const perPage = request.qs().per_page ?? 10
       const status = request.qs().status
+      const name = request.qs().name
 
       let ruangCurhatRaw = RuangCurhat.query()
         .select('*')
-        .preload('publicUser')
+        .preload('publicUser', (publicUserQuery) => {
+          publicUserQuery.preload('profile')
+        })
         .preload('adminUser')
 
       if (status) {
         ruangCurhatRaw = ruangCurhatRaw.where('status', status)
+      }
+
+      if (name) {
+        ruangCurhatRaw = ruangCurhatRaw
+          .whereHas('publicUser', (publicUserQuery) => {
+            publicUserQuery.whereHas('profile', (profileQuery) => {
+              profileQuery.whereILike('name', `%${name}%`)
+            })
+          })
       }
 
       const ruangCurhat = await ruangCurhatRaw.orderBy('created_at', 'desc').paginate(page, perPage)
@@ -37,7 +49,9 @@ export default class RuangCurhatController {
       const id: number = params.id
       const ruangCurhat = await RuangCurhat.findOrFail(id)
 
-      await ruangCurhat.load('publicUser')
+      await ruangCurhat.load('publicUser', (publicUserQuery) => {
+        publicUserQuery.preload('profile')
+      })
       await ruangCurhat.load('adminUser')
 
       return response.ok({
