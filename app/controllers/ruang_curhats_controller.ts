@@ -9,6 +9,7 @@ export default class RuangCurhatController {
       const perPage = request.qs().per_page ?? 10
       const status = request.qs().status
       const name = request.qs().name
+      const gender = request.qs().gender
 
       let ruangCurhatRaw = RuangCurhat.query()
         .select('*')
@@ -21,11 +22,17 @@ export default class RuangCurhatController {
         ruangCurhatRaw = ruangCurhatRaw.where('status', status)
       }
 
-      if (name) {
+      // Optimize: Combine name and gender filters in a single whereHas to reduce subqueries
+      if (name || gender) {
         ruangCurhatRaw = ruangCurhatRaw
           .whereHas('publicUser', (publicUserQuery) => {
             publicUserQuery.whereHas('profile', (profileQuery) => {
-              profileQuery.whereILike('name', `%${name}%`)
+              if (name) {
+                profileQuery.whereILike('name', `%${name}%`)
+              }
+              if (gender) {
+                profileQuery.where('gender', gender)
+              }
             })
           })
       }
