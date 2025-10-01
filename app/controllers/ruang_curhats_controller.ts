@@ -10,6 +10,7 @@ export default class RuangCurhatController {
       const status = request.qs().status
       const name = request.qs().name
       const gender = request.qs().gender
+      const adminDisplayName = request.qs().admin_display_name
 
       let ruangCurhatRaw = RuangCurhat.query()
         .select('*')
@@ -34,6 +35,14 @@ export default class RuangCurhatController {
                 profileQuery.where('gender', gender)
               }
             })
+          })
+      }
+
+      // Filter by admin user display name
+      if (adminDisplayName) {
+        ruangCurhatRaw = ruangCurhatRaw
+          .whereHas('adminUser', (adminUserQuery) => {
+            adminUserQuery.whereILike('display_name', `%${adminDisplayName}%`)
           })
       }
 
