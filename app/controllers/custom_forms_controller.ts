@@ -1,5 +1,7 @@
 import { HttpContext } from '@adonisjs/core/http'
 import CustomForm from '#models/custom_form'
+import Activity from '#models/activity'
+import Club from '#models/club'
 import {
   customFormValidator,
   updateCustomFormValidator,
@@ -317,6 +319,80 @@ export default class CustomFormsController {
       return response.ok({
         message: 'FORM_DETACHED_FROM_CLUB_SUCCESS',
         data: updatedForm,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async getAvailableActivities({ request, response }: HttpContext) {
+    try {
+      const currentFormId = request.qs().current_form_id
+
+      // Get all activities
+      const activities = await Activity.query().orderBy('name', 'asc')
+
+      // Get all activity IDs that have forms attached (excluding current form if provided)
+      const query = CustomForm.query()
+        .where('featureType', 'activity_registration')
+        .whereNotNull('featureId')
+
+      if (currentFormId) {
+        query.whereNot('id', currentFormId)
+      }
+
+      const formsWithActivities = await query
+
+      const activityIdsWithForms = formsWithActivities.map(form => form.featureId)
+
+      // Filter out activities that already have forms
+      const availableActivities = activities.filter(
+        activity => !activityIdsWithForms.includes(activity.id)
+      )
+
+      return response.ok({
+        message: 'GET_AVAILABLE_ACTIVITIES_SUCCESS',
+        data: availableActivities,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async getAvailableClubs({ request, response }: HttpContext) {
+    try {
+      const currentFormId = request.qs().current_form_id
+
+      // Get all clubs
+      const clubs = await Club.query().orderBy('name', 'asc')
+
+      // Get all club IDs that have forms attached (excluding current form if provided)
+      const query = CustomForm.query()
+        .where('featureType', 'club_registration')
+        .whereNotNull('featureId')
+
+      if (currentFormId) {
+        query.whereNot('id', currentFormId)
+      }
+
+      const formsWithClubs = await query
+
+      const clubIdsWithForms = formsWithClubs.map(form => form.featureId)
+
+      // Filter out clubs that already have forms
+      const availableClubs = clubs.filter(
+        club => !clubIdsWithForms.includes(club.id)
+      )
+
+      return response.ok({
+        message: 'GET_AVAILABLE_CLUBS_SUCCESS',
+        data: availableClubs,
       })
     } catch (error) {
       return response.internalServerError({

@@ -178,6 +178,8 @@ router
         router.get('', [CustomFormsController, 'index'])
         router.get('by-feature', [CustomFormsController, 'getByFeature'])
         router.get('unattached', [CustomFormsController, 'getUnattachedForms'])
+        router.get('available-activities', [CustomFormsController, 'getAvailableActivities'])
+        router.get('available-clubs', [CustomFormsController, 'getAvailableClubs'])
         router.get(':id', [CustomFormsController, 'show'])
         router.post('', [CustomFormsController, 'store'])
         router.put(':id', [CustomFormsController, 'update'])

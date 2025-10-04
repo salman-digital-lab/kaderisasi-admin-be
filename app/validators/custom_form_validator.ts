@@ -4,8 +4,8 @@ export const customFormValidator = vine.compile(
   vine.object({
     formName: vine.string().trim().minLength(1).maxLength(255),
     formDescription: vine.string().trim().optional(),
-    featureType: vine.enum(['activity_registration', 'club_registration']).optional(),
-    featureId: vine.number().positive().optional(),
+    featureType: vine.enum(['activity_registration', 'club_registration', 'independent_form']).optional(),
+    featureId: vine.number().positive().nullable().optional(),
     formSchema: vine.object({
       fields: vine.array(
         vine.object({
@@ -50,8 +50,8 @@ export const updateCustomFormValidator = vine.compile(
   vine.object({
     formName: vine.string().trim().minLength(1).maxLength(255).optional(),
     formDescription: vine.string().trim().optional(),
-    featureType: vine.enum(['activity_registration', 'club_registration']).optional(),
-    featureId: vine.number().positive().optional(),
+    featureType: vine.enum(['activity_registration', 'club_registration', 'independent_form']).optional(),
+    featureId: vine.number().positive().nullable().optional(),
     formSchema: vine
       .object({
         fields: vine.array(
