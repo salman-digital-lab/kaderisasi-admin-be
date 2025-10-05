@@ -16,8 +16,25 @@ import {
   ACTIVITY_TYPE_SPECIAL,
 } from '../constants/activity_registration.js'
 import PublicUser from '#models/public_user'
+import { USER_LEVEL_ENUM } from '../../types/constants/profile.js'
 
 export default class ActivityRegistrationsController {
+  // Helper function to convert level number to label
+  private getLevelLabel(level: number): string {
+    switch (level) {
+      case USER_LEVEL_ENUM.JAMAAH:
+        return 'JAMAAH'
+      case USER_LEVEL_ENUM.AKTIVIS:
+        return 'AKTIVIS'
+      case USER_LEVEL_ENUM.KADER:
+        return 'KADER'
+      case USER_LEVEL_ENUM.KADER_LANJUT:
+        return 'KADER LANJUT'
+      default:
+        return String(level)
+    }
+  }
+
   async store({ params, request, response }: HttpContext) {
     const payload = await storeActivityRegistration.validate(request.all())
     const activityId = params.id
@@ -351,6 +368,14 @@ export default class ActivityRegistrationsController {
         })
       }
 
+      // Check if activity has a custom form attached
+      const CustomForm = (await import('#models/custom_form')).default
+      const customForm = await CustomForm.query()
+        .where('feature_type', 'activity_registration')
+        .where('feature_id', activityId)
+        .where('is_active', true)
+        .first()
+
       // Define headers
       const baseHeaders = [
         'No',
@@ -387,10 +412,32 @@ export default class ActivityRegistrationsController {
         return str === '' ? '""' : str
       }
 
-      const questions = activity.additionalConfig.additional_questionnaire
+      let questionHeaders: string[] = []
+      let questionKeys: string[] = []
 
-      // Add questionnaire headers
-      const questionHeaders = questions.map((q) => q.label)
+      if (customForm) {
+        // Use custom form schema
+        const formSchema = customForm.formSchema
+        
+        // Extract all fields from all sections, excluding the profile_data section
+        // since profile data is already included in baseHeaders
+        for (const section of formSchema.fields) {
+          // Skip the profile_data section
+          if (section.section_name === 'profile_data') {
+            continue
+          }
+          
+          for (const field of section.fields) {
+            questionHeaders.push(field.label)
+            questionKeys.push(field.key)
+          }
+        }
+      } else {
+        // Use old questionnaire system
+        const questions = activity.additionalConfig.additional_questionnaire
+        questionHeaders = questions.map((q) => q.label)
+        questionKeys = questions.map((q) => q.name)
+      }
       
       // Escape all headers properly
       const allHeadersEscaped = [...baseHeaders, ...questionHeaders].map(header => escapeCSV(header))
@@ -426,13 +473,13 @@ export default class ActivityRegistrationsController {
           escapeCSV(universityName),
           escapeCSV(profile.major),
           escapeCSV(profile.intakeYear),
-          escapeCSV(profile.level),
+          escapeCSV(this.getLevelLabel(profile.level)),
         ]
 
         // Add questionnaire answers
         const answers = item.questionnaireAnswer
-        const answerValues = Object.values(questions).map((question) =>
-          escapeCSV(answers[question.name])
+        const answerValues = questionKeys.map((key) =>
+          escapeCSV(answers[key])
         )
 
         // Combine all values and add to CSV content with Windows line endings for Excel
