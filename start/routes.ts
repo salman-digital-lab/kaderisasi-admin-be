@@ -185,6 +185,8 @@ router
         router.put(':id', [CustomFormsController, 'update'])
         router.put(':id/attach-club', [CustomFormsController, 'attachToClub'])
         router.put(':id/detach-club', [CustomFormsController, 'detachFromClub'])
+        router.put(':id/attach-activity', [CustomFormsController, 'attachToActivity'])
+        router.put(':id/detach-activity', [CustomFormsController, 'detachFromActivity'])
         router.delete(':id', [CustomFormsController, 'destroy'])
         router.put(':id/toggle-active', [CustomFormsController, 'toggleActive'])
       })

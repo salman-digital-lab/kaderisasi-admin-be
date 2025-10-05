@@ -176,7 +176,7 @@ export default class CustomFormsController {
         .first()
 
       if (!customForm) {
-        return response.notFound({
+        return response.ok({
           message: 'CUSTOM_FORM_NOT_FOUND_FOR_FEATURE',
         })
       }
@@ -393,6 +393,84 @@ export default class CustomFormsController {
       return response.ok({
         message: 'GET_AVAILABLE_CLUBS_SUCCESS',
         data: availableClubs,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async attachToActivity({ params, request, response }: HttpContext) {
+    try {
+      const formId: number = params.id
+      const { activityId } = request.all()
+
+      if (!activityId) {
+        return response.badRequest({
+          message: 'ACTIVITY_ID_REQUIRED',
+        })
+      }
+
+      const customForm = await CustomForm.find(formId)
+
+      if (!customForm) {
+        return response.notFound({
+          message: 'CUSTOM_FORM_NOT_FOUND',
+        })
+      }
+
+      // Check if the form is already attached to something
+      if (customForm.featureId) {
+        return response.badRequest({
+          message: 'FORM_ALREADY_ATTACHED',
+        })
+      }
+
+      // Attach the form to the activity
+      customForm.featureType = 'activity_registration'
+      customForm.featureId = activityId
+      await customForm.save()
+
+      return response.ok({
+        message: 'FORM_ATTACHED_TO_ACTIVITY_SUCCESS',
+        data: customForm,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async detachFromActivity({ params, response }: HttpContext) {
+    try {
+      const formId: number = params.id
+
+      const customForm = await CustomForm.find(formId)
+
+      if (!customForm) {
+        return response.notFound({
+          message: 'CUSTOM_FORM_NOT_FOUND',
+        })
+      }
+
+      // Detach the form from any feature by setting featureId to null
+      await CustomForm.query()
+        .where('id', formId)
+        .update({
+          featureId: null,
+          updatedAt: new Date()
+        })
+
+      // Fetch the updated form
+      const updatedForm = await CustomForm.find(formId)
+
+      return response.ok({
+        message: 'FORM_DETACHED_FROM_ACTIVITY_SUCCESS',
+        data: updatedForm,
       })
     } catch (error) {
       return response.internalServerError({
