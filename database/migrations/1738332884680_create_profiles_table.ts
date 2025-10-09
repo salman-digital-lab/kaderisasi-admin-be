@@ -16,7 +16,7 @@ export default class extends BaseSchema {
       table.string('line', 50)
       table.string('instagram', 50)
       table.string('tiktok', 50)
-      table.string('linkedin', 50)
+      table.string('linkedin', 255)
 
       table.integer('province_id', 2).references('provinces.id')
       table.integer('city_id', 4).references('cities.id')
