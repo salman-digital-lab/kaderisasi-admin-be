@@ -7,6 +7,8 @@ import {
   updateClubRegistrationValidator,
   bulkUpdateClubRegistrationsValidator,
 } from '#validators/club_registration_validator'
+import ExcelJS from 'exceljs'
+import Profile from '#models/profile'
 
 export default class ClubRegistrationsController {
   /**
@@ -205,7 +207,7 @@ export default class ClubRegistrationsController {
   }
 
   /**
-   * Export club registrations to CSV
+   * Export club registrations to XLSX
    */
   async export({ params, response }: HttpContext) {
     try {
@@ -219,33 +221,115 @@ export default class ClubRegistrationsController {
         })
         .orderBy('created_at', 'desc')
 
-      // Create CSV content
-      const csvHeaders = [
-        'ID',
-        'Member Name',
+      // Check if club has a custom form attached
+      const CustomForm = (await import('#models/custom_form')).default
+      const customForm = await CustomForm.query()
+        .where('feature_type', 'club_registration')
+        .where('feature_id', clubId)
+        .where('is_active', true)
+        .first()
+
+      // Define base headers
+      const baseHeaders = [
+        'No',
+        'Nama Lengkap',
         'Email',
+        'Whatsapp',
+        'Nomor Identitas',
+        'Provinsi',
+        'Universitas',
+        'Jurusan',
+        'Tahun Masuk',
         'Status',
-        'Registration Date',
-        'Additional Data',
+        'Tanggal Pendaftaran',
       ]
 
-      const csvRows = registrations.map((registration) => [
-        registration.id,
-        registration.member.profile?.name || 'N/A',
-        registration.member.email,
-        registration.status,
-        registration.createdAt.toFormat('yyyy-MM-dd HH:mm:ss'),
-        JSON.stringify(registration.additionalData),
-      ])
+      let questionHeaders: string[] = []
+      let questionKeys: string[] = []
 
-      const csvContent = [csvHeaders, ...csvRows]
-        .map((row) => row.map((field) => `"${field}"`).join(','))
-        .join('\n')
+      if (customForm) {
+        // Use custom form schema
+        const formSchema = customForm.formSchema
 
-      response.header('Content-Type', 'text/csv')
-      response.header('Content-Disposition', `attachment; filename="${club.name}_registrations.csv"`)
+        // Extract all fields from all sections, excluding the profile_data section
+        for (const section of formSchema.fields) {
+          if (section.section_name === 'profile_data') {
+            continue
+          }
 
-      return response.send(csvContent)
+          for (const field of section.fields) {
+            questionHeaders.push(field.label)
+            questionKeys.push(field.key)
+          }
+        }
+      }
+
+      // Create workbook and worksheet
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Registrations')
+
+      // Add headers
+      const allHeaders = [...baseHeaders, ...questionHeaders]
+      worksheet.addRow(allHeaders)
+
+      // Style the header row
+      const headerRow = worksheet.getRow(1)
+      headerRow.font = { bold: true }
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      }
+
+      // Process each registration
+      for (let [i, registration] of registrations.entries()) {
+        const profile = registration.member.profile
+
+        const baseData = [
+          i + 1,
+          profile?.name || '',
+          registration.member.email || '',
+          profile?.whatsapp || '',
+          profile?.personal_id || '',
+          profile?.province?.name || '',
+          profile?.university?.name || '',
+          profile?.major || '',
+          profile?.intakeYear || '',
+          registration.status,
+          registration.createdAt.toFormat('yyyy-MM-dd HH:mm:ss'),
+        ]
+
+        // Add questionnaire answers if custom form exists
+        const answers = registration.additionalData || {}
+        const answerValues = questionKeys.map((key) => answers[key] || '')
+
+        // Add row to worksheet
+        worksheet.addRow([...baseData, ...answerValues])
+      }
+
+      // Auto-fit columns
+      worksheet.columns.forEach((column) => {
+        let maxLength = 0
+        column.eachCell?.({ includeEmpty: true }, (cell) => {
+          const columnLength = cell.value ? cell.value.toString().length : 10
+          if (columnLength > maxLength) {
+            maxLength = columnLength
+          }
+        })
+        column.width = maxLength < 10 ? 10 : maxLength > 50 ? 50 : maxLength + 2
+      })
+
+      // Generate buffer
+      const buffer = await workbook.xlsx.writeBuffer()
+
+      // Use the correct content type and filename
+      const sanitizedFileName = club.name.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+
+      return response
+        .status(200)
+        .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .header('Content-Disposition', `attachment; filename="${sanitizedFileName}_registrations.xlsx"`)
+        .send(buffer)
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',

@@ -17,6 +17,7 @@ import {
 } from '../constants/activity_registration.js'
 import PublicUser from '#models/public_user'
 import { USER_LEVEL_ENUM } from '../../types/constants/profile.js'
+import ExcelJS from 'exceljs'
 
 export default class ActivityRegistrationsController {
   // Helper function to convert level number to label
@@ -395,30 +396,13 @@ export default class ActivityRegistrationsController {
         'Jenjang',
       ]
 
-      // Improved CSV escaping function that handles all Excel edge cases
-      const escapeCSV = (str: string | number | null | undefined) => {
-        if (str === null || str === undefined) return '""'
-        
-        str = String(str)
-        
-        // Check if the string contains any characters that would require escaping
-        if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
-          // Replace double quotes with two double quotes (Excel standard)
-          str = str.replace(/"/g, '""')
-          // Wrap in quotes
-          return `"${str}"`
-        }
-        
-        return str === '' ? '""' : str
-      }
-
       let questionHeaders: string[] = []
       let questionKeys: string[] = []
 
       if (customForm) {
         // Use custom form schema
         const formSchema = customForm.formSchema
-        
+
         // Extract all fields from all sections, excluding the profile_data section
         // since profile data is already included in baseHeaders
         for (const section of formSchema.fields) {
@@ -426,7 +410,7 @@ export default class ActivityRegistrationsController {
           if (section.section_name === 'profile_data') {
             continue
           }
-          
+
           for (const field of section.fields) {
             questionHeaders.push(field.label)
             questionKeys.push(field.key)
@@ -438,13 +422,23 @@ export default class ActivityRegistrationsController {
         questionHeaders = questions.map((q) => q.label)
         questionKeys = questions.map((q) => q.name)
       }
-      
-      // Escape all headers properly
-      const allHeadersEscaped = [...baseHeaders, ...questionHeaders].map(header => escapeCSV(header))
 
-      // Start building CSV content with UTF-8 BOM for Excel compatibility
-      // The BOM (Byte Order Mark) helps Excel identify the file as UTF-8
-      let csvContent = '\ufeff' + allHeadersEscaped.join(',') + '\r\n'
+      // Create workbook and worksheet
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Registrations')
+
+      // Add headers
+      const allHeaders = [...baseHeaders, ...questionHeaders]
+      worksheet.addRow(allHeaders)
+
+      // Style the header row
+      const headerRow = worksheet.getRow(1)
+      headerRow.font = { bold: true }
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      }
 
       // Process each registration
       for (let [i, item] of registrations.entries()) {
@@ -460,41 +454,53 @@ export default class ActivityRegistrationsController {
 
         const baseData = [
           i + 1,
-          escapeCSV(profile.name),
-          escapeCSV(profile.gender),
-          escapeCSV(item.publicUser.email),
-          escapeCSV(profile.whatsapp),
-          escapeCSV(profile.personal_id),
-          escapeCSV(profile.line),
-          escapeCSV(profile.instagram),
-          escapeCSV(profile.tiktok),
-          escapeCSV(profile.linkedin),
-          escapeCSV(provinceName),
-          escapeCSV(universityName),
-          escapeCSV(profile.major),
-          escapeCSV(profile.intakeYear),
-          escapeCSV(this.getLevelLabel(profile.level)),
+          profile.name || '',
+          profile.gender || '',
+          item.publicUser.email || '',
+          profile.whatsapp || '',
+          profile.personal_id || '',
+          profile.line || '',
+          profile.instagram || '',
+          profile.tiktok || '',
+          profile.linkedin || '',
+          provinceName,
+          universityName,
+          profile.major || '',
+          profile.intakeYear || '',
+          this.getLevelLabel(profile.level),
         ]
 
         // Add questionnaire answers
         const answers = item.questionnaireAnswer
-        const answerValues = questionKeys.map((key) =>
-          escapeCSV(answers[key])
-        )
+        const answerValues = questionKeys.map((key) => answers[key] || '')
 
-        // Combine all values and add to CSV content with Windows line endings for Excel
-        const rowData = [...baseData, ...answerValues]
-        csvContent += rowData.join(',') + '\r\n'
+        // Add row to worksheet
+        worksheet.addRow([...baseData, ...answerValues])
       }
 
-      // Use the correct content type and filename for Excel compatibility
+      // Auto-fit columns
+      worksheet.columns.forEach((column) => {
+        let maxLength = 0
+        column.eachCell?.({ includeEmpty: true }, (cell) => {
+          const columnLength = cell.value ? cell.value.toString().length : 10
+          if (columnLength > maxLength) {
+            maxLength = columnLength
+          }
+        })
+        column.width = maxLength < 10 ? 10 : maxLength > 50 ? 50 : maxLength + 2
+      })
+
+      // Generate buffer
+      const buffer = await workbook.xlsx.writeBuffer()
+
+      // Use the correct content type and filename
       const sanitizedFileName = activity.name.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
-      
+
       return response
         .status(200)
-        .safeHeader('Content-type', 'text/csv; charset=utf-8')
-        .safeHeader('Content-Disposition', `attachment; filename="${sanitizedFileName}.csv"`)
-        .send(csvContent)
+        .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .header('Content-Disposition', `attachment; filename="${sanitizedFileName}.xlsx"`)
+        .send(buffer)
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
