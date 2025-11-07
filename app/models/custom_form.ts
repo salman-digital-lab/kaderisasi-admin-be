@@ -48,10 +48,10 @@ export default class CustomForm extends BaseModel {
   declare formName: string
 
   @column()
-  declare formDescription: string
+  declare formDescription: string | null
 
   @column()
-  declare postSubmissionInfo: string
+  declare postSubmissionInfo: string | null
 
   @column()
   declare featureType: 'activity_registration' | 'club_registration' | 'independent_form'
