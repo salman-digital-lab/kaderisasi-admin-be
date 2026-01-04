@@ -149,6 +149,35 @@ export default class ActivitiesController {
     }
   }
 
+  async reorderImages({ request, params, response }: HttpContext) {
+    const activityId = params.id
+    const payload = request.all()
+    const images: string[] = payload.images
+    try {
+      const activity = await Activity.findOrFail(activityId)
+
+      if (!activity.additionalConfig.images || activity.additionalConfig.images.length === 0) {
+        return response.notFound({
+          message: 'IMAGE_NOT_FOUND',
+        })
+      }
+
+      const newConfig = activity.additionalConfig
+      newConfig.images = images
+      await activity.merge({ additionalConfig: newConfig }).save()
+
+      return response.ok({
+        message: 'REORDER_IMAGES_SUCCESS',
+        data: activity,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
   async store({ request, response }: HttpContext) {
     const payload = await activityValidator.validate(request.all())
     try {
