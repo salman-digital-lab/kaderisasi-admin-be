@@ -8,7 +8,6 @@ import {
   bulkUpdateClubRegistrationsValidator,
 } from '#validators/club_registration_validator'
 import ExcelJS from 'exceljs'
-import Profile from '#models/profile'
 
 export default class ClubRegistrationsController {
   /**
@@ -155,7 +154,6 @@ export default class ClubRegistrationsController {
    * Bulk update registrations status
    */
   async bulkUpdate({ request, response }: HttpContext) {
-    
     try {
       const payload = await bulkUpdateClubRegistrationsValidator.validate(request.all())
 
@@ -328,7 +326,10 @@ export default class ClubRegistrationsController {
       return response
         .status(200)
         .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        .header('Content-Disposition', `attachment; filename="${sanitizedFileName}_registrations.xlsx"`)
+        .header(
+          'Content-Disposition',
+          `attachment; filename="${sanitizedFileName}_registrations.xlsx"`
+        )
         .send(buffer)
     } catch (error) {
       return response.internalServerError({
@@ -337,6 +338,4 @@ export default class ClubRegistrationsController {
       })
     }
   }
-
-
 }
