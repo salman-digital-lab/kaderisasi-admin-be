@@ -98,8 +98,29 @@ export default class ActivityRegistrationsController {
     const activityId = params.id
     const page = request.qs().page ?? 1
     const perPage = request.qs().per_page ?? 10
-    const name = request.qs().name
+    const search = request.qs().search // Combined search for name and email
     const status = request.qs().status
+    const universityId = request.qs().university_id
+    const provinceId = request.qs().province_id
+    const intakeYear = request.qs().intake_year
+    const sortBy = request.qs().sort_by ?? 'name'
+    const sortOrder = request.qs().sort_order ?? 'asc'
+
+    // Map frontend sort field names to database column names
+    const sortFieldMap: Record<string, string> = {
+      name: 'profiles.name',
+      email: 'public_users.email',
+      status: 'activity_registrations.status',
+      level: 'profiles.level',
+      university_id: 'profiles.university_id',
+      province_id: 'profiles.province_id',
+      intake_year: 'profiles.intake_year',
+      major: 'profiles.major',
+      whatsapp: 'profiles.whatsapp',
+    }
+
+    const sortColumn = sortFieldMap[sortBy] || 'profiles.name'
+    const sortDirection = sortOrder === 'desc' ? 'desc' : 'asc'
 
     try {
       const activity = await Activity.findOrFail(activityId)
@@ -108,28 +129,97 @@ export default class ActivityRegistrationsController {
         return 'profiles.' + element.name
       })
 
-      const registrations = await db
+      let query = db
         .from('activity_registrations')
         .join('public_users', 'activity_registrations.user_id', '=', 'public_users.id')
         .join('profiles', 'activity_registrations.user_id', '=', 'profiles.user_id')
         .where('activity_registrations.activity_id', activityId)
-        .where('profiles.name', 'ILIKE', name ? '%' + name + '%' : '%%')
-        .where('activity_registrations.status', 'ILIKE', status ? '%' + status + '%' : '%%')
+
+      // Apply filters
+      if (search) {
+        query = query.where((builder) => {
+          builder
+            .where('profiles.name', 'ILIKE', '%' + search + '%')
+            .orWhere('public_users.email', 'ILIKE', '%' + search + '%')
+        })
+      }
+      if (status) {
+        query = query.where('activity_registrations.status', 'ILIKE', '%' + status + '%')
+      }
+      if (universityId) {
+        query = query.where('profiles.university_id', universityId)
+      }
+      if (provinceId) {
+        query = query.where('profiles.province_id', provinceId)
+      }
+      if (intakeYear) {
+        query = query.where('profiles.intake_year', intakeYear)
+      }
+
+      const registrations = await query
         .select(
           'activity_registrations.id',
           'public_users.id as user_id',
           'public_users.email',
           'profiles.name',
           'profiles.level',
+          'profiles.university_id',
+          'profiles.province_id',
+          'profiles.intake_year',
+          'profiles.major',
+          'profiles.whatsapp',
+          'profiles.instagram',
+          'profiles.line',
+          'profiles.personal_id',
           ...profileDataField,
-          'activity_registrations.status'
+          'activity_registrations.status',
+          'activity_registrations.created_at'
         )
-        .orderBy('profiles.name', 'asc')
+        .orderBy(sortColumn, sortDirection)
         .paginate(page, perPage)
 
       return response.ok({
         messages: 'GET_DATA_SUCCESS',
         data: registrations,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  async statistics({ params, response }: HttpContext) {
+    const activityId = params.id
+
+    try {
+      // Get total count and counts by status
+      const statusCounts = await db
+        .from('activity_registrations')
+        .where('activity_id', activityId)
+        .select('status')
+        .count('* as count')
+        .groupBy('status')
+
+      const totalCount = await db
+        .from('activity_registrations')
+        .where('activity_id', activityId)
+        .count('* as total')
+        .first()
+
+      // Transform to a more usable format
+      const byStatus: Record<string, number> = {}
+      for (const row of statusCounts) {
+        byStatus[row.status] = Number(row.count)
+      }
+
+      return response.ok({
+        messages: 'GET_DATA_SUCCESS',
+        data: {
+          total: Number(totalCount?.total || 0),
+          by_status: byStatus,
+        },
       })
     } catch (error) {
       return response.internalServerError({

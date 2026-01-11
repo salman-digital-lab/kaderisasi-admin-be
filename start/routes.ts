@@ -78,8 +78,12 @@ router
         router.put(':id/delete-image', [ActivitiesController, 'deleteImage'])
         router.put(':id/reorder-images', [ActivitiesController, 'reorderImages'])
         router.get(':id/registrations', [ActivityRegistrationsController, 'index'])
+        router.get(':id/registrations/statistics', [ActivityRegistrationsController, 'statistics'])
         router.get(':id/registrations-export/', [ActivityRegistrationsController, 'export'])
-        router.put(':id/registrations/status-by-email', [ActivityRegistrationsController, 'updateStatusByListOfEmail'])
+        router.put(':id/registrations/status-by-email', [
+          ActivityRegistrationsController,
+          'updateStatusByListOfEmail',
+        ])
         router.put(':id/registrations', [ActivityRegistrationsController, 'updateStatusBulk'])
         router.post(':id/registrations', [ActivityRegistrationsController, 'store'])
       })
@@ -155,7 +159,7 @@ router
         router.post(':id/media/youtube', [ClubsController, 'addYoutubeMedia'])
         router.put(':id/delete-media', [ClubsController, 'deleteMedia'])
         router.put(':id/registration-info', [ClubsController, 'updateRegistrationInfo'])
-        
+
         // Club registrations management
         router.get(':id/registrations', [ClubRegistrationsController, 'index'])
         router.post(':id/registrations', [ClubRegistrationsController, 'store'])
