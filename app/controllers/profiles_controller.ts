@@ -10,18 +10,17 @@ export default class ProfilesController {
       const perPage = request.qs().per_page ?? 10
       const search = request.qs().search
       const badge = request.qs().badge
-      const email = request.qs().email
 
       let query = Profile.query()
         .select('*')
         .where((query) => {
           if (search) {
-            query.where('name', 'ILIKE', '%' + search + '%')
-          }
-          if (email) {
-            query.whereHas('publicUser', (query) => {
-              query.where('email', 'ILIKE', '%' + email + '%')
-            })
+            // Search by name OR email
+            query
+              .where('name', 'ILIKE', '%' + search + '%')
+              .orWhereHas('publicUser', (subQuery) => {
+                subQuery.where('email', 'ILIKE', '%' + search + '%')
+              })
           }
         })
         .preload('publicUser')
