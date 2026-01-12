@@ -20,6 +20,12 @@ export const activityValidator = vine.compile(
           vine.object({ name: vine.string(), required: vine.boolean() })
         ),
         additional_questionnaire: vine.array(vine.any()),
+        status_visibility: vine
+          .object({
+            is_visible: vine.boolean(),
+            visible_at: vine.string().optional(),
+          })
+          .optional(),
       })
       .optional(),
     is_published: vine.number().optional(),
@@ -48,6 +54,12 @@ export const updateActivityValidator = vine.compile(
           vine.object({ name: vine.string(), required: vine.boolean() })
         ),
         additional_questionnaire: vine.array(vine.any()),
+        status_visibility: vine
+          .object({
+            is_visible: vine.boolean(),
+            visible_at: vine.string().optional(),
+          })
+          .optional(),
       })
       .optional(),
     is_published: vine.number().optional(),
