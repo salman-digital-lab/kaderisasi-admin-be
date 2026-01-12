@@ -80,6 +80,9 @@ export default class Profile extends BaseModel {
   @column()
   declare badges: string
 
+  @column()
+  declare birthDate: Date | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
