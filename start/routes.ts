@@ -40,6 +40,7 @@ router
 
     router
       .group(() => {
+        router.get('stats', [DashboardController, 'stats'])
         router.get('profiles', [DashboardController, 'CountProfiles'])
         router.get('gender', [DashboardController, 'CountUsersGender'])
       })
