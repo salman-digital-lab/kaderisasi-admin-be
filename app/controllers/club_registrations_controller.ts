@@ -157,17 +157,32 @@ export default class ClubRegistrationsController {
     try {
       const payload = await bulkUpdateClubRegistrationsValidator.validate(request.all())
 
+      // Get all registration IDs from payload
+      const registrationIds = payload.registrations.map((r) => r.id)
+
+      // Fetch all registrations in one query
+      const registrations = await ClubRegistration.query()
+        .whereIn('id', registrationIds)
+        .preload('member')
+        .preload('club')
+
+      // Create a Map for O(1) lookups by ID
+      const registrationMap = new Map(registrations.map((r) => [r.id, r]))
+
       const updatedRegistrations = []
 
+      // Update each registration
       for (const registrationData of payload.registrations) {
-        const registration = await ClubRegistration.findOrFail(registrationData.id)
+        const registration = registrationMap.get(registrationData.id)
+        if (!registration) {
+          continue // Skip if not found
+        }
+
         registration.status = registrationData.status
         if (registrationData.additional_data) {
           registration.additionalData = registrationData.additional_data
         }
         await registration.save()
-        await registration.load('member')
-        await registration.load('club')
         updatedRegistrations.push(registration)
       }
 

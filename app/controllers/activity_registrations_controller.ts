@@ -283,10 +283,14 @@ export default class ActivityRegistrationsController {
                 ACTIVITY_LEVEL_UPGRADE_MAP[activityType as keyof typeof ACTIVITY_LEVEL_UPGRADE_MAP],
             })
 
-          // Update badges by appending new badge
+          // Update badges by appending new badge (batch fetch profiles to avoid N+1)
           if (activity.badge) {
-            for (const user of userIds) {
-              const profile = await Profile.findByOrFail('user_id', user.userId, { client: trx })
+            const profiles = await Profile.query({ client: trx }).whereIn(
+              'user_id',
+              userIds.map((user) => user.userId)
+            )
+
+            for (const profile of profiles) {
               const currentBadges = profile.badges as unknown as string[]
               if (!currentBadges.includes(activity.badge)) {
                 await profile
@@ -374,10 +378,11 @@ export default class ActivityRegistrationsController {
                 ACTIVITY_LEVEL_UPGRADE_MAP[activityType as keyof typeof ACTIVITY_LEVEL_UPGRADE_MAP],
             })
 
-          // Update badges by appending new badge
+          // Update badges by appending new badge (batch fetch profiles to avoid N+1)
           if (activity.badge) {
-            for (const userId of userIds) {
-              const profile = await Profile.findByOrFail('user_id', userId, { client: trx })
+            const profiles = await Profile.query({ client: trx }).whereIn('user_id', userIds)
+
+            for (const profile of profiles) {
               const currentBadges = profile.badges as unknown as string[]
               if (!currentBadges.includes(activity.badge)) {
                 await profile
@@ -450,8 +455,13 @@ export default class ActivityRegistrationsController {
       const activity = await Activity.findOrFail(activityId)
       const registrations = await ActivityRegistration.query()
         .where({ activityId: activityId })
-        .preload('publicUser')
-        .select('*')
+        .preload('publicUser', (userQuery) => {
+          userQuery.preload('profile', (profileQuery) => {
+            profileQuery.preload('province')
+            profileQuery.preload('city')
+            profileQuery.preload('university')
+          })
+        })
 
       if (!registrations) {
         return response.notFound({
@@ -530,34 +540,29 @@ export default class ActivityRegistrationsController {
         fgColor: { argb: 'FFE0E0E0' },
       }
 
-      // Process each registration
+      // Process each registration (no N+1 query - profile is preloaded)
       for (let [i, item] of registrations.entries()) {
-        let profile = await Profile.query()
-          .where('user_id', item.publicUser.id)
-          .preload('province')
-          .preload('city')
-          .preload('university')
-          .firstOrFail()
+        const profile = item.publicUser.profile
 
-        const provinceName = profile.province ? profile.province.name : ''
-        const universityName = profile.university ? profile.university.name : ''
+        const provinceName = profile?.province ? profile.province.name : ''
+        const universityName = profile?.university ? profile.university.name : ''
 
         const baseData = [
           i + 1,
-          profile.name || '',
-          profile.gender || '',
+          profile?.name || '',
+          profile?.gender || '',
           item.publicUser.email || '',
-          profile.whatsapp || '',
-          profile.personal_id || '',
-          profile.line || '',
-          profile.instagram || '',
-          profile.tiktok || '',
-          profile.linkedin || '',
+          profile?.whatsapp || '',
+          profile?.personal_id || '',
+          profile?.line || '',
+          profile?.instagram || '',
+          profile?.tiktok || '',
+          profile?.linkedin || '',
           provinceName,
           universityName,
-          profile.major || '',
-          profile.intakeYear || '',
-          this.getLevelLabel(profile.level),
+          profile?.major || '',
+          profile?.intakeYear || '',
+          this.getLevelLabel(profile?.level || 0),
         ]
 
         // Add questionnaire answers

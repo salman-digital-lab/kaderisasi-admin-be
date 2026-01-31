@@ -2,10 +2,7 @@ import { HttpContext } from '@adonisjs/core/http'
 import CustomForm from '#models/custom_form'
 import Activity from '#models/activity'
 import Club from '#models/club'
-import {
-  customFormValidator,
-  updateCustomFormValidator,
-} from '#validators/custom_form_validator'
+import { customFormValidator, updateCustomFormValidator } from '#validators/custom_form_validator'
 
 export default class CustomFormsController {
   async index({ request, response }: HttpContext) {
@@ -36,9 +33,7 @@ export default class CustomFormsController {
         query.where('isActive', isActive === 'true')
       }
 
-      const customForms = await query
-        .orderBy('createdAt', 'desc')
-        .paginate(page, perPage)
+      const customForms = await query.orderBy('createdAt', 'desc').paginate(page, perPage)
 
       return response.ok({
         message: 'GET_DATA_SUCCESS',
@@ -225,17 +220,14 @@ export default class CustomFormsController {
       const perPage = request.qs().per_page ?? 10
       const search = request.qs().search
 
-      const query = CustomForm.query()
-        .whereNull('featureId')
+      const query = CustomForm.query().whereNull('featureId')
 
       // Apply search filter
       if (search) {
         query.where('formName', 'ILIKE', `%${search}%`)
       }
 
-      const unattachedForms = await query
-        .orderBy('createdAt', 'desc')
-        .paginate(page, perPage)
+      const unattachedForms = await query.orderBy('createdAt', 'desc').paginate(page, perPage)
 
       return response.ok({
         message: 'GET_UNATTACHED_FORMS_SUCCESS',
@@ -306,12 +298,10 @@ export default class CustomFormsController {
 
       // Detach the form from any feature by setting featureId to null
       // Note: We'll use a raw query since Lucid ORM doesn't handle null values well for updates
-      await CustomForm.query()
-        .where('id', formId)
-        .update({
-          featureId: null,
-          updatedAt: new Date()
-        })
+      await CustomForm.query().where('id', formId).update({
+        featureId: null,
+        updatedAt: new Date(),
+      })
 
       // Fetch the updated form
       const updatedForm = await CustomForm.find(formId)
@@ -332,26 +322,27 @@ export default class CustomFormsController {
     try {
       const currentFormId = request.qs().current_form_id
 
-      // Get all activities
-      const activities = await Activity.query().orderBy('name', 'asc')
-
-      // Get all activity IDs that have forms attached (excluding current form if provided)
-      const query = CustomForm.query()
+      // Get activity IDs that have forms attached (excluding current form if provided)
+      const formsQuery = CustomForm.query()
+        .select('featureId')
         .where('featureType', 'activity_registration')
         .whereNotNull('featureId')
 
       if (currentFormId) {
-        query.whereNot('id', currentFormId)
+        formsQuery.whereNot('id', currentFormId)
       }
 
-      const formsWithActivities = await query
+      const formsWithActivities = await formsQuery
+      const activityIdsWithForms = formsWithActivities.map((form) => form.featureId)
 
-      const activityIdsWithForms = formsWithActivities.map(form => form.featureId)
+      // Use database-level filtering with whereNotIn instead of in-memory filter
+      const activitiesQuery = Activity.query().select('id', 'name').orderBy('name', 'asc')
 
-      // Filter out activities that already have forms
-      const availableActivities = activities.filter(
-        activity => !activityIdsWithForms.includes(activity.id)
-      )
+      if (activityIdsWithForms.length > 0) {
+        activitiesQuery.whereNotIn('id', activityIdsWithForms as number[])
+      }
+
+      const availableActivities = await activitiesQuery
 
       return response.ok({
         message: 'GET_AVAILABLE_ACTIVITIES_SUCCESS',
@@ -369,26 +360,27 @@ export default class CustomFormsController {
     try {
       const currentFormId = request.qs().current_form_id
 
-      // Get all clubs
-      const clubs = await Club.query().orderBy('name', 'asc')
-
-      // Get all club IDs that have forms attached (excluding current form if provided)
-      const query = CustomForm.query()
+      // Get club IDs that have forms attached (excluding current form if provided)
+      const formsQuery = CustomForm.query()
+        .select('featureId')
         .where('featureType', 'club_registration')
         .whereNotNull('featureId')
 
       if (currentFormId) {
-        query.whereNot('id', currentFormId)
+        formsQuery.whereNot('id', currentFormId)
       }
 
-      const formsWithClubs = await query
+      const formsWithClubs = await formsQuery
+      const clubIdsWithForms = formsWithClubs.map((form) => form.featureId)
 
-      const clubIdsWithForms = formsWithClubs.map(form => form.featureId)
+      // Use database-level filtering with whereNotIn instead of in-memory filter
+      const clubsQuery = Club.query().select('id', 'name').orderBy('name', 'asc')
 
-      // Filter out clubs that already have forms
-      const availableClubs = clubs.filter(
-        club => !clubIdsWithForms.includes(club.id)
-      )
+      if (clubIdsWithForms.length > 0) {
+        clubsQuery.whereNotIn('id', clubIdsWithForms as number[])
+      }
+
+      const availableClubs = await clubsQuery
 
       return response.ok({
         message: 'GET_AVAILABLE_CLUBS_SUCCESS',
@@ -458,12 +450,10 @@ export default class CustomFormsController {
       }
 
       // Detach the form from any feature by setting featureId to null
-      await CustomForm.query()
-        .where('id', formId)
-        .update({
-          featureId: null,
-          updatedAt: new Date()
-        })
+      await CustomForm.query().where('id', formId).update({
+        featureId: null,
+        updatedAt: new Date(),
+      })
 
       // Fetch the updated form
       const updatedForm = await CustomForm.find(formId)
