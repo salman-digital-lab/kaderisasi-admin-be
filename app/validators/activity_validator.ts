@@ -28,7 +28,9 @@ export const activityValidator = vine.compile(
           .optional(),
       })
       .optional(),
+      .optional(),
     is_published: vine.number().optional(),
+    is_registration_open: vine.boolean().optional(),
     activity_category: vine.number().withoutDecimals().positive().optional(),
     badge: vine.string().optional(),
   })
@@ -62,7 +64,9 @@ export const updateActivityValidator = vine.compile(
           .optional(),
       })
       .optional(),
+      .optional(),
     is_published: vine.number().optional(),
+    is_registration_open: vine.boolean().optional(),
     activity_category: vine.number().withoutDecimals().positive().optional(),
     badge: vine.string().optional(),
   })
