@@ -16,6 +16,8 @@ const LeaderboardsController = () => import('#controllers/leaderboards_controlle
 const ClubsController = () => import('#controllers/clubs_controller')
 const ClubRegistrationsController = () => import('#controllers/club_registrations_controller')
 const CustomFormsController = () => import('#controllers/custom_forms_controller')
+const CertificateTemplatesController = () =>
+  import('#controllers/certificate_templates_controller')
 
 router
   .group(() => {
@@ -197,6 +199,18 @@ router
         router.put(':id/toggle-active', [CustomFormsController, 'toggleActive'])
       })
       .prefix('custom-forms')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.get('', [CertificateTemplatesController, 'index'])
+        router.get(':id', [CertificateTemplatesController, 'show'])
+        router.post('', [CertificateTemplatesController, 'store'])
+        router.put(':id', [CertificateTemplatesController, 'update'])
+        router.delete(':id', [CertificateTemplatesController, 'destroy'])
+        router.post(':id/background', [CertificateTemplatesController, 'uploadBackground'])
+      })
+      .prefix('certificate-templates')
       .use(middleware.auth())
   })
   .prefix('v2')
