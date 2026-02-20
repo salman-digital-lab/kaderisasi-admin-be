@@ -18,6 +18,7 @@ const ClubRegistrationsController = () => import('#controllers/club_registration
 const CustomFormsController = () => import('#controllers/custom_forms_controller')
 const CertificateTemplatesController = () =>
   import('#controllers/certificate_templates_controller')
+const CertificatesController = () => import('#controllers/certificates_controller')
 
 router
   .group(() => {
@@ -211,6 +212,14 @@ router
         router.post(':id/background', [CertificateTemplatesController, 'uploadBackground'])
       })
       .prefix('certificate-templates')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.post('/generate', [CertificatesController, 'generate'])
+        router.post('/generate-single', [CertificatesController, 'generateSingle'])
+      })
+      .prefix('certificates')
       .use(middleware.auth())
   })
   .prefix('v2')

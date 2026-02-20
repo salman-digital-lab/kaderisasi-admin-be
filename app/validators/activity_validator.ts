@@ -26,6 +26,7 @@ export const activityValidator = vine.compile(
             visible_at: vine.string().optional(),
           })
           .optional(),
+        certificate_template_id: vine.number().optional(),
       })
       .optional(),
     is_published: vine.number().optional(),
@@ -61,6 +62,7 @@ export const updateActivityValidator = vine.compile(
             visible_at: vine.string().optional(),
           })
           .optional(),
+        certificate_template_id: vine.number().optional(),
       })
       .optional(),
     is_published: vine.number().optional(),

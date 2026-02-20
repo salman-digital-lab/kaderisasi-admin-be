@@ -219,7 +219,10 @@ export default class ActivitiesController {
       const id: number = params.id
       const activityData = await Activity.findOrFail(id)
       if (payload.additional_config) {
-        var newConfig: any = payload.additional_config
+        var newConfig: any = {
+          ...activityData.additionalConfig,
+          ...payload.additional_config,
+        }
         if (activityData.additionalConfig.images) {
           newConfig.images = activityData.additionalConfig.images
         }
