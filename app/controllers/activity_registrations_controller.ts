@@ -131,8 +131,8 @@ export default class ActivityRegistrationsController {
 
       let query = db
         .from('activity_registrations')
-        .join('public_users', 'activity_registrations.user_id', '=', 'public_users.id')
-        .join('profiles', 'activity_registrations.user_id', '=', 'profiles.user_id')
+        .leftJoin('public_users', 'activity_registrations.user_id', '=', 'public_users.id')
+        .leftJoin('profiles', 'activity_registrations.user_id', '=', 'profiles.user_id')
         .where('activity_registrations.activity_id', activityId)
 
       // Apply filters
@@ -141,6 +141,8 @@ export default class ActivityRegistrationsController {
           builder
             .where('profiles.name', 'ILIKE', '%' + search + '%')
             .orWhere('public_users.email', 'ILIKE', '%' + search + '%')
+            .orWhereRaw("activity_registrations.guest_data->>'name' ILIKE ?", ['%' + search + '%'])
+            .orWhereRaw("activity_registrations.guest_data->>'email' ILIKE ?", ['%' + search + '%'])
         })
       }
       if (status) {
@@ -160,17 +162,19 @@ export default class ActivityRegistrationsController {
         .select(
           'activity_registrations.id',
           'public_users.id as user_id',
-          'public_users.email',
-          'profiles.name',
+          db.raw("COALESCE(public_users.email, activity_registrations.guest_data->>'email') as email"),
+          db.raw("COALESCE(profiles.name, activity_registrations.guest_data->>'name') as name"),
           'profiles.level',
           'profiles.university_id',
           'profiles.province_id',
           'profiles.intake_year',
           'profiles.major',
-          'profiles.whatsapp',
+          db.raw("COALESCE(profiles.gender, activity_registrations.guest_data->>'gender') as gender"),
+          db.raw("COALESCE(profiles.whatsapp, activity_registrations.guest_data->>'whatsapp') as whatsapp"),
           'profiles.instagram',
           'profiles.line',
           'profiles.personal_id',
+          'activity_registrations.guest_data',
           ...profileDataField,
           'activity_registrations.status',
           'activity_registrations.created_at'
@@ -272,12 +276,13 @@ export default class ActivityRegistrationsController {
               .paginate(1, ids.length)
           ).all()
 
+          const resolvedUserIds = userIds
+            .map((user) => user.userId)
+            .filter((id): id is number => id !== null)
+
           // Update level
           await Profile.query({ client: trx })
-            .whereIn(
-              'user_id',
-              userIds.map((user) => user.userId)
-            )
+            .whereIn('user_id', resolvedUserIds)
             .update({
               level:
                 ACTIVITY_LEVEL_UPGRADE_MAP[activityType as keyof typeof ACTIVITY_LEVEL_UPGRADE_MAP],
@@ -287,7 +292,7 @@ export default class ActivityRegistrationsController {
           if (activity.badge) {
             const profiles = await Profile.query({ client: trx }).whereIn(
               'user_id',
-              userIds.map((user) => user.userId)
+              resolvedUserIds
             )
 
             for (const profile of profiles) {
@@ -541,28 +546,32 @@ export default class ActivityRegistrationsController {
       }
 
       // Process each registration (no N+1 query - profile is preloaded)
-      for (let [i, item] of registrations.entries()) {
-        const profile = item.publicUser.profile
+      for (const [i, item] of registrations.entries()) {
+        const isGuest = item.userId === null
+        const profile = item.publicUser?.profile
+        const guestData = item.guestData
 
-        const provinceName = profile?.province ? profile.province.name : ''
-        const universityName = profile?.university ? profile.university.name : ''
+        const getName = () => (isGuest ? guestData?.name : profile?.name) || ''
+        const getEmail = () => (isGuest ? guestData?.email : item.publicUser?.email) || ''
+        const getWhatsapp = () => (isGuest ? guestData?.whatsapp : profile?.whatsapp) || ''
+        const getLevel = () => (isGuest ? 'Tamu' : this.getLevelLabel(profile?.level || 0))
 
         const baseData = [
           i + 1,
-          profile?.name || '',
+          getName(),
           profile?.gender || '',
-          item.publicUser.email || '',
-          profile?.whatsapp || '',
+          getEmail(),
+          getWhatsapp(),
           profile?.personal_id || '',
           profile?.line || '',
           profile?.instagram || '',
           profile?.tiktok || '',
           profile?.linkedin || '',
-          provinceName,
-          universityName,
+          profile?.province?.name || '',
+          profile?.university?.name || '',
           profile?.major || '',
           profile?.intakeYear || '',
-          this.getLevelLabel(profile?.level || 0),
+          getLevel(),
         ]
 
         // Add questionnaire answers
