@@ -128,7 +128,7 @@ export default class ProfilesController {
       }
 
       if (payload.extra_data) {
-        payload.extra_data = { ...(profile.extraData ?? {}), ...payload.extra_data }
+        payload.extra_data = { ...(profile.extraData ?? {}), ...payload.extra_data } as typeof payload.extra_data
       }
 
       const updated = await profile.merge(payload).save()
