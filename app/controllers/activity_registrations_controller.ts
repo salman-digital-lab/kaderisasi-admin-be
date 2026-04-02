@@ -174,6 +174,7 @@ export default class ActivityRegistrationsController {
           'profiles.instagram',
           'profiles.line',
           'profiles.personal_id',
+          'profiles.education_history',
           'activity_registrations.guest_data',
           ...profileDataField,
           'activity_registrations.status',
@@ -464,7 +465,6 @@ export default class ActivityRegistrationsController {
           userQuery.preload('profile', (profileQuery) => {
             profileQuery.preload('province')
             profileQuery.preload('city')
-            profileQuery.preload('university')
           })
         })
 
@@ -495,9 +495,7 @@ export default class ActivityRegistrationsController {
         'TikTok',
         'LinkedIn',
         'Provinsi',
-        'Universitas',
-        'Jurusan',
-        'Tahun Masuk',
+        'Pendidikan Sekarang',
         'Jenjang',
       ]
 
@@ -555,6 +553,19 @@ export default class ActivityRegistrationsController {
         const getEmail = () => (isGuest ? guestData?.email : item.publicUser?.email) || ''
         const getWhatsapp = () => (isGuest ? guestData?.whatsapp : profile?.whatsapp) || ''
         const getLevel = () => (isGuest ? 'Tamu' : this.getLevelLabel(profile?.level || 0))
+        const getCurrentEducation = () => {
+          const history = profile?.educationHistory
+          const last =
+            history?.[history.length - 1] ??
+            (guestData?.current_education as
+              | { degree: string; institution: string; major?: string; intake_year?: number }
+              | undefined)
+          if (!last?.institution) return ''
+          const degreeMap: Record<string, string> = { bachelor: 'S1', master: 'S2', doctoral: 'S3' }
+          const degree = degreeMap[last.degree] ?? last.degree
+          const parts = [last.institution, last.major].filter(Boolean).join(', ')
+          return `${degree} - ${parts}${last.intake_year ? ` (${last.intake_year})` : ''}`
+        }
 
         const baseData = [
           i + 1,
@@ -568,9 +579,7 @@ export default class ActivityRegistrationsController {
           profile?.tiktok || '',
           profile?.linkedin || '',
           profile?.province?.name || '',
-          profile?.university?.name || '',
-          profile?.major || '',
-          profile?.intakeYear || '',
+          getCurrentEducation(),
           getLevel(),
         ]
 

@@ -19,6 +19,7 @@ const CustomFormsController = () => import('#controllers/custom_forms_controller
 const CertificateTemplatesController = () =>
   import('#controllers/certificate_templates_controller')
 const CertificatesController = () => import('#controllers/certificates_controller')
+const MembersController = () => import('#controllers/members_controller')
 
 router
   .group(() => {
@@ -63,6 +64,7 @@ router
     router
       .group(() => {
         router.put('/:id', [ProfilesController, 'update'])
+        router.put('/:id/regional-assignment', [ProfilesController, 'updateRegionalAssignment'])
         router.put('auth/:id', [AuthController, 'updateMember'])
         router.get('/:id', [ProfilesController, 'show'])
         router.get('user/:id', [ProfilesController, 'showByUserId'])
@@ -70,6 +72,14 @@ router
         router.delete(':id', [ProfilesController, 'delete'])
       })
       .prefix('profiles')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.post('', [MembersController, 'store'])
+        router.post(':id/generate-account', [MembersController, 'generateAccount'])
+      })
+      .prefix('members')
       .use(middleware.auth())
 
     router
