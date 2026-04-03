@@ -5,6 +5,7 @@ import { RealAdminUserFactory } from '#database/factories/admin_user_factory'
 
 import Province from '#models/province'
 import City from '#models/city'
+import Country from '#models/country'
 import University from '#models/university'
 import { AchievementFactory } from '#database/factories/achievement_factory'
 import { PublicUserFactory } from '#database/factories/public_user_factory'
@@ -31,6 +32,16 @@ export default class extends BaseSeeder {
         provinceId: Number(item.province_code),
         name: item.name,
         isActive: true,
+      }))
+    )
+    const countriesArr: { Name: string; Code: string }[] = await csv().fromFile(
+      'database/data/country.csv'
+    )
+    await Country.updateOrCreateMany(
+      'code',
+      countriesArr.map((item) => ({
+        name: item.Name,
+        code: item.Code,
       }))
     )
     const universitiesArr: { ud_sp: string; kode_pt: string; nama_pt: string }[] =

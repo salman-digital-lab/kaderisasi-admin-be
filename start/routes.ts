@@ -20,6 +20,7 @@ const CertificateTemplatesController = () =>
   import('#controllers/certificate_templates_controller')
 const CertificatesController = () => import('#controllers/certificates_controller')
 const MembersController = () => import('#controllers/members_controller')
+const CountriesController = () => import('#controllers/countries_controller')
 
 router
   .group(() => {
@@ -143,6 +144,8 @@ router
         router.delete(':id', [CitiesController, 'delete']).use(middleware.auth())
       })
       .prefix('cities')
+
+    router.get('countries', [CountriesController, 'index'])
 
     router
       .group(() => {
