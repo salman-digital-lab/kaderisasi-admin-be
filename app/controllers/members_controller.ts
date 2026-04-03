@@ -58,7 +58,6 @@ export default class MembersController {
           birth_date: payload.birth_date ?? null,
           province_id: payload.province_id ?? null,
           city_id: payload.city_id ?? null,
-          place_of_birth: payload.place_of_birth ?? null,
           country: payload.country ?? null,
         })
       })

@@ -17,7 +17,6 @@ export const createMemberValidator = vine.compile(
     birth_date: vine.string().optional(),
     province_id: vine.number().optional(),
     city_id: vine.number().optional(),
-    place_of_birth: vine.string().optional(),
     country: vine.string().optional(),
   })
 )

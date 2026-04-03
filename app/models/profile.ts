@@ -105,9 +105,6 @@ export default class Profile extends BaseModel {
   declare birthDate: Date | null
 
   @column()
-  declare placeOfBirth: string | null
-
-  @column()
   declare originProvinceId: number | null
 
   @belongsTo(() => Province, { foreignKey: 'originProvinceId' })
