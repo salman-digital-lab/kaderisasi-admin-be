@@ -25,6 +25,7 @@ export default class AuthController {
         displayName: payload.displayName,
         email: payload.email,
         password: payload.password,
+        isActive: true,
       })
 
       return response.ok({
@@ -49,6 +50,12 @@ export default class AuthController {
       if (!user) {
         return response.notFound({
           message: 'USER_NOT_FOUND',
+        })
+      }
+
+      if (!user.isActive) {
+        return response.forbidden({
+          message: 'USER_INACTIVE',
         })
       }
 

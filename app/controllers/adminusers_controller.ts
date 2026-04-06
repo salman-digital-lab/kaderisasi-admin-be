@@ -48,6 +48,7 @@ export default class AdminusersController {
         email: payload.email,
         password: payload.password,
         role: payload.role,
+        isActive: true,
       })
 
       return response.ok({
@@ -87,7 +88,12 @@ export default class AdminusersController {
     try {
       const id: number = params.id
       const admin = await AdminUser.findOrFail(id)
-      const updated = await admin.merge({ role: payload.role }).save()
+      const updated = await admin
+        .merge({
+          ...(payload.role !== undefined ? { role: payload.role } : {}),
+          ...(payload.isActive !== undefined ? { isActive: payload.isActive } : {}),
+        })
+        .save()
 
       return response.ok({
         message: 'UPDATE_DATA_SUCCESS',
