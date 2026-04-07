@@ -7,34 +7,21 @@ export default class {
     await next()
     const datetime = new Date().toLocaleString()
     if (request.url() === '/health') return
-    if (response.getStatus() < 400) {
-      logger.info(
-        'DATE: ' +
-          datetime +
-          ' | IP: ' +
-          request.ip() +
-          ' | METHOD: ' +
-          request.method() +
-          ' | URL: ' +
-          request.url() +
-          ' | STATUS: ' +
-          JSON.stringify(response.getStatus())
-      )
-    } else {
-      logger.error(
-        'DATE: ' +
-          datetime +
-          ' | IP: ' +
-          request.ip() +
-          ' | METHOD: ' +
-          request.method() +
-          ' | URL: ' +
-          request.url() +
-          ' | STATUS: ' +
-          JSON.stringify(response.getStatus()) +
-          ' | BODY: ' +
-          JSON.stringify(response.getBody())
-      )
-    }
+    if (response.getStatus() < 400) return
+
+    logger.error(
+      'DATE: ' +
+        datetime +
+        ' | IP: ' +
+        request.ip() +
+        ' | METHOD: ' +
+        request.method() +
+        ' | URL: ' +
+        request.url() +
+        ' | STATUS: ' +
+        JSON.stringify(response.getStatus()) +
+        ' | BODY: ' +
+        JSON.stringify(response.getBody())
+    )
   }
 }
