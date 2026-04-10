@@ -19,7 +19,115 @@ import PublicUser from '#models/public_user'
 import { USER_LEVEL_ENUM } from '../../types/constants/profile.js'
 import ExcelJS from 'exceljs'
 
+type ExportEducationEntry = {
+  institution?: string
+  faculty?: string
+  major?: string
+  intake_year?: number
+}
+
+type ExportRegistrantIdentity = {
+  name: string
+  email: string
+  whatsapp: string
+  gender: string
+  personalId: string
+  line: string
+  instagram: string
+  tiktok: string
+  linkedin: string
+  province: string
+  level: string
+}
+
+const REGISTRATION_EXPORT_HEADERS = [
+  'No',
+  'Nama Lengkap',
+  'Jenis Kelamin',
+  'Email',
+  'Whatsapp',
+  'Nomor Identitas',
+  'Line ID',
+  'Instagram',
+  'TikTok',
+  'LinkedIn',
+  'Provinsi',
+  'Institusi Pendidikan Saat Ini',
+  'Fakultas Pendidikan Saat Ini',
+  'Jurusan Pendidikan Saat Ini',
+  'Tahun Masuk Pendidikan Saat Ini',
+  'Jenjang',
+]
+
 export default class ActivityRegistrationsController {
+  private getCurrentEducationEntry(
+    profile?: Profile | null,
+    guestData?: Record<string, unknown> | null
+  ): ExportEducationEntry | undefined {
+    const history = profile?.educationHistory
+    const latestEducation = history?.[history.length - 1]
+
+    if (latestEducation) {
+      return latestEducation
+    }
+
+    return guestData?.current_education as ExportEducationEntry | undefined
+  }
+
+  private getRegistrantIdentity(
+    registration: ActivityRegistration,
+    profile?: Profile | null
+  ): ExportRegistrantIdentity {
+    const isGuest = registration.userId === null
+    const guestData = registration.guestData
+
+    return {
+      name: (isGuest ? guestData?.name : profile?.name) || '',
+      email: (isGuest ? guestData?.email : registration.publicUser?.email) || '',
+      whatsapp: (isGuest ? guestData?.whatsapp : profile?.whatsapp) || '',
+      gender: profile?.gender || '',
+      personalId: profile?.personal_id || '',
+      line: profile?.line || '',
+      instagram: profile?.instagram || '',
+      tiktok: profile?.tiktok || '',
+      linkedin: profile?.linkedin || '',
+      province: profile?.province?.name || '',
+      level: isGuest ? 'Tamu' : this.getLevelLabel(profile?.level || 0),
+    }
+  }
+
+  private buildRegistrationExportRow(
+    rowNumber: number,
+    registration: ActivityRegistration,
+    questionKeys: string[]
+  ): Array<string | number> {
+    const profile = registration.publicUser?.profile
+    const identity = this.getRegistrantIdentity(registration, profile)
+    const currentEducation = this.getCurrentEducationEntry(profile, registration.guestData)
+    const answers = registration.questionnaireAnswer
+    const answerValues = questionKeys.map((key) => answers[key] || '')
+
+    return [
+      rowNumber,
+      identity.name,
+      identity.gender,
+      identity.email,
+      identity.whatsapp,
+      identity.personalId,
+      identity.line,
+      identity.instagram,
+      identity.tiktok,
+      identity.linkedin,
+      identity.province,
+      currentEducation?.institution || '',
+      currentEducation?.faculty || '',
+      currentEducation?.major || '',
+      currentEducation?.intake_year || '',
+      identity.level,
+      ...answerValues,
+    ]
+  }
+
   // Helper function to convert level number to label
   private getLevelLabel(level: number): string {
     switch (level) {
@@ -482,23 +590,6 @@ export default class ActivityRegistrationsController {
         .where('is_active', true)
         .first()
 
-      // Define headers
-      const baseHeaders = [
-        'No',
-        'Nama Lengkap',
-        'Jenis Kelamin',
-        'Email',
-        'Whatsapp',
-        'Nomor Identitas',
-        'Line ID',
-        'Instagram',
-        'TikTok',
-        'LinkedIn',
-        'Provinsi',
-        'Pendidikan Sekarang',
-        'Jenjang',
-      ]
-
       let questionHeaders: string[] = []
       let questionKeys: string[] = []
 
@@ -531,7 +622,7 @@ export default class ActivityRegistrationsController {
       const worksheet = workbook.addWorksheet('Registrations')
 
       // Add headers
-      const allHeaders = [...baseHeaders, ...questionHeaders]
+      const allHeaders = [...REGISTRATION_EXPORT_HEADERS, ...questionHeaders]
       worksheet.addRow(allHeaders)
 
       // Style the header row
@@ -545,50 +636,7 @@ export default class ActivityRegistrationsController {
 
       // Process each registration (no N+1 query - profile is preloaded)
       for (const [i, item] of registrations.entries()) {
-        const isGuest = item.userId === null
-        const profile = item.publicUser?.profile
-        const guestData = item.guestData
-
-        const getName = () => (isGuest ? guestData?.name : profile?.name) || ''
-        const getEmail = () => (isGuest ? guestData?.email : item.publicUser?.email) || ''
-        const getWhatsapp = () => (isGuest ? guestData?.whatsapp : profile?.whatsapp) || ''
-        const getLevel = () => (isGuest ? 'Tamu' : this.getLevelLabel(profile?.level || 0))
-        const getCurrentEducation = () => {
-          const history = profile?.educationHistory
-          const last =
-            history?.[history.length - 1] ??
-            (guestData?.current_education as
-              | { degree: string; institution: string; major?: string; intake_year?: number }
-              | undefined)
-          if (!last?.institution) return ''
-          const degreeMap: Record<string, string> = { bachelor: 'S1', master: 'S2', doctoral: 'S3' }
-          const degree = degreeMap[last.degree] ?? last.degree
-          const parts = [last.institution, last.major].filter(Boolean).join(', ')
-          return `${degree} - ${parts}${last.intake_year ? ` (${last.intake_year})` : ''}`
-        }
-
-        const baseData = [
-          i + 1,
-          getName(),
-          profile?.gender || '',
-          getEmail(),
-          getWhatsapp(),
-          profile?.personal_id || '',
-          profile?.line || '',
-          profile?.instagram || '',
-          profile?.tiktok || '',
-          profile?.linkedin || '',
-          profile?.province?.name || '',
-          getCurrentEducation(),
-          getLevel(),
-        ]
-
-        // Add questionnaire answers
-        const answers = item.questionnaireAnswer
-        const answerValues = questionKeys.map((key) => answers[key] || '')
-
-        // Add row to worksheet
-        worksheet.addRow([...baseData, ...answerValues])
+        worksheet.addRow(this.buildRegistrationExportRow(i + 1, item, questionKeys))
       }
 
       // Auto-fit columns
