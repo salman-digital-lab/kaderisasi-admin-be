@@ -2,6 +2,7 @@ import { HttpContext } from '@adonisjs/core/http'
 import drive from '@adonisjs/drive/services/main'
 
 import Activity from '#models/activity'
+import { generateUniqueActivitySlug } from '#services/activity_slug_service'
 import {
   activityValidator,
   updateActivityValidator,
@@ -181,8 +182,11 @@ export default class ActivitiesController {
   async store({ request, response }: HttpContext) {
     const payload = await activityValidator.validate(request.all())
     try {
+      const slug = await generateUniqueActivitySlug(payload.name)
+
       const activityData = await Activity.create({
         ...payload,
+        slug,
         activityStart: payload.activity_start
           ? DateTime.fromJSDate(payload.activity_start)
           : undefined,
@@ -218,6 +222,7 @@ export default class ActivitiesController {
     try {
       const id: number = params.id
       const activityData = await Activity.findOrFail(id)
+      const { slug: _slug, ...payloadWithoutSlug } = payload as typeof payload & { slug?: string }
       if (payload.additional_config) {
         var newConfig: any = {
           ...activityData.additionalConfig,
@@ -227,25 +232,27 @@ export default class ActivitiesController {
           newConfig.images = activityData.additionalConfig.images
         }
       }
-      payload.additional_config = newConfig
+      payloadWithoutSlug.additional_config = newConfig
       const updated = await activityData
         .merge({
-          ...payload,
-          activityStart: payload.activity_start
-            ? DateTime.fromJSDate(payload.activity_start)
+          ...payloadWithoutSlug,
+          activityStart: payloadWithoutSlug.activity_start
+            ? DateTime.fromJSDate(payloadWithoutSlug.activity_start)
             : undefined,
-          activityEnd: payload.activity_end ? DateTime.fromJSDate(payload.activity_end) : undefined,
-          registrationStart: payload.registration_start
-            ? DateTime.fromJSDate(payload.registration_start)
+          activityEnd: payloadWithoutSlug.activity_end
+            ? DateTime.fromJSDate(payloadWithoutSlug.activity_end)
             : undefined,
-          registrationEnd: payload.registration_end
-            ? DateTime.fromJSDate(payload.registration_end)
+          registrationStart: payloadWithoutSlug.registration_start
+            ? DateTime.fromJSDate(payloadWithoutSlug.registration_start)
             : undefined,
-          selectionStart: payload.selection_start
-            ? DateTime.fromJSDate(payload.selection_start)
+          registrationEnd: payloadWithoutSlug.registration_end
+            ? DateTime.fromJSDate(payloadWithoutSlug.registration_end)
             : undefined,
-          selectionEnd: payload.selection_end
-            ? DateTime.fromJSDate(payload.selection_end)
+          selectionStart: payloadWithoutSlug.selection_start
+            ? DateTime.fromJSDate(payloadWithoutSlug.selection_start)
+            : undefined,
+          selectionEnd: payloadWithoutSlug.selection_end
+            ? DateTime.fromJSDate(payloadWithoutSlug.selection_end)
             : undefined,
         })
         .save()
