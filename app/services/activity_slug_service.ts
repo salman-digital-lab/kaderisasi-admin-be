@@ -2,29 +2,27 @@ import Activity from '#models/activity'
 
 function normalizeActivitySlug(name: string): string {
   const normalized = name
+    .normalize('NFKD')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\p{Separator}\p{Dash_Punctuation}\s]+/gu, '-')
+    .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
 
   return normalized || 'activity'
 }
 
-function generateSlugPrefix(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
-
 export async function generateUniqueActivitySlug(name: string): Promise<string> {
-  const normalizedName = normalizeActivitySlug(name)
+  const baseSlug = normalizeActivitySlug(name)
+  let slug = baseSlug
+  let suffix = 2
 
-  while (true) {
-    const slug = `${generateSlugPrefix()}-${normalizedName}`
-    const existingActivity = await Activity.findBy('slug', slug)
-
-    if (!existingActivity) {
-      return slug
-    }
+  while (await Activity.findBy('slug', slug)) {
+    slug = `${baseSlug}-${suffix}`
+    suffix += 1
   }
+
+  return slug
 }
