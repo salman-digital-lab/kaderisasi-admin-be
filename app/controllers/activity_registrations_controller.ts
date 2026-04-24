@@ -405,11 +405,11 @@ export default class ActivityRegistrationsController {
             )
 
             for (const profile of profiles) {
-              const currentBadges = profile.badges as unknown as string[]
+              const currentBadges = profile.badges ?? []
               if (!currentBadges.includes(activity.badge)) {
                 await profile
                   .merge({
-                    badges: JSON.stringify([...currentBadges, activity.badge]),
+                    badges: [...currentBadges, activity.badge],
                   })
                   .save()
               }
@@ -497,11 +497,11 @@ export default class ActivityRegistrationsController {
             const profiles = await Profile.query({ client: trx }).whereIn('user_id', userIds)
 
             for (const profile of profiles) {
-              const currentBadges = profile.badges as unknown as string[]
+              const currentBadges = profile.badges ?? []
               if (!currentBadges.includes(activity.badge)) {
                 await profile
                   .merge({
-                    badges: JSON.stringify([...currentBadges, activity.badge]),
+                    badges: [...currentBadges, activity.badge],
                   })
                   .save()
               }
