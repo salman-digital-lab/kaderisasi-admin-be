@@ -136,11 +136,14 @@ export default class LeaderboardsController {
 
       // Filter by month and year if provided
       if (month && year) {
-        const targetMonth = DateTime.fromObject({ year: parseInt(year), month: parseInt(month) }).startOf('month')
+        const targetMonth = DateTime.fromObject({
+          year: Number.parseInt(year),
+          month: Number.parseInt(month),
+        }).startOf('month')
         query.where('month', targetMonth.toSQLDate()!)
       } else if (year) {
-        const startOfYear = DateTime.fromObject({ year: parseInt(year) }).startOf('year')
-        const endOfYear = DateTime.fromObject({ year: parseInt(year) }).endOf('year')
+        const startOfYear = DateTime.fromObject({ year: Number.parseInt(year) }).startOf('year')
+        const endOfYear = DateTime.fromObject({ year: Number.parseInt(year) }).endOf('year')
         query.whereBetween('month', [startOfYear.toSQLDate()!, endOfYear.toSQLDate()!])
       }
 
@@ -164,7 +167,7 @@ export default class LeaderboardsController {
       query.orderBy('score', 'desc')
 
       const leaderboard = await query.paginate(page, perPage)
-      
+
       return response.ok({
         message: 'GET_DATA_SUCCESS',
         data: leaderboard,
@@ -184,12 +187,11 @@ export default class LeaderboardsController {
     const { page = 1, per_page: perPage = 10, email, name } = request.qs()
 
     try {
-      const query = LifetimeLeaderboard.query()
-        .preload('user', (userQuery) => {
-          userQuery.preload('profile', (profileQuery) => {
-            profileQuery.preload('university')
-          })
+      const query = LifetimeLeaderboard.query().preload('user', (userQuery) => {
+        userQuery.preload('profile', (profileQuery) => {
+          profileQuery.preload('university')
         })
+      })
 
       // Filter by email if provided
       if (email) {
@@ -210,7 +212,7 @@ export default class LeaderboardsController {
       query.orderBy('score', 'desc')
 
       const leaderboard = await query.paginate(page, perPage)
-      
+
       return response.ok({
         message: 'GET_DATA_SUCCESS',
         data: leaderboard,
@@ -244,7 +246,7 @@ export default class LeaderboardsController {
         achievement.status = status
         achievement.approverId = auth.user!.id
         achievement.approvedAt = DateTime.now()
-        
+
         // Update score if provided
         if (score !== undefined) {
           achievement.score = score
@@ -254,7 +256,7 @@ export default class LeaderboardsController {
         if (status === 2 && remark) {
           achievement.remark = remark
         }
-        
+
         await achievement.save()
 
         // If approved, update leaderboards

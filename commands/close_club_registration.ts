@@ -6,7 +6,8 @@ import logger from '@adonisjs/core/services/logger'
 
 export default class CloseClubRegistration extends BaseCommand {
   static commandName = 'clubs:close-registration'
-  static description = 'Set club is_registration_open to false when registration_end_date has passed'
+  static description =
+    'Set club is_registration_open to false when registration_end_date has passed'
 
   static options: CommandOptions = {
     startApp: true,
@@ -25,9 +26,11 @@ export default class CloseClubRegistration extends BaseCommand {
 
       logger.info('Completed: Closed club registrations')
       logger.info(`Updated ${expiredClubs.length} club(s)`)
-      
+
       for (let club of expiredClubs) {
-        logger.info(`Club ID ${club.id} (${club.name}) - Registration ended: ${club.registration_end_date}`)
+        logger.info(
+          `Club ID ${club.id} (${club.name}) - Registration ended: ${club.registration_end_date}`
+        )
       }
 
       if (expiredClubs.length === 0) {

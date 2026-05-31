@@ -61,7 +61,7 @@ export default class ClubsController {
       }
 
       // Get attached custom form if any
-      const CustomForm = (await import('#models/custom_form')).default
+      const { default: CustomForm } = await import('#models/custom_form')
       const attachedForm = await CustomForm.query()
         .where('featureType', 'club_registration')
         .where('featureId', id)
@@ -135,7 +135,8 @@ export default class ClubsController {
         updateData.endPeriod = payload.end_period ? DateTime.fromJSDate(payload.end_period) : null
       }
       if (payload.is_show !== undefined) updateData.isShow = payload.is_show
-      if (payload.is_registration_open !== undefined) updateData.isRegistrationOpen = payload.is_registration_open
+      if (payload.is_registration_open !== undefined)
+        updateData.isRegistrationOpen = payload.is_registration_open
       if (payload.registration_end_date !== undefined) {
         updateData.registrationEndDate = payload.registration_end_date
           ? DateTime.fromJSDate(payload.registration_end_date)
@@ -367,8 +368,8 @@ export default class ClubsController {
       const club = await Club.findOrFail(clubId)
 
       const registrationInfo = {
-        registration_info: payload.registration_info || "",
-        after_registration_info: payload.after_registration_info || "",
+        registration_info: payload.registration_info || '',
+        after_registration_info: payload.after_registration_info || '',
       }
 
       await club.merge({ registrationInfo }).save()

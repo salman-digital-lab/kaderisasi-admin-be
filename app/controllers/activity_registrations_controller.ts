@@ -270,15 +270,21 @@ export default class ActivityRegistrationsController {
         .select(
           'activity_registrations.id',
           'public_users.id as user_id',
-          db.raw("COALESCE(public_users.email, activity_registrations.guest_data->>'email') as email"),
+          db.raw(
+            "COALESCE(public_users.email, activity_registrations.guest_data->>'email') as email"
+          ),
           db.raw("COALESCE(profiles.name, activity_registrations.guest_data->>'name') as name"),
           'profiles.level',
           'profiles.university_id',
           'profiles.province_id',
           'profiles.intake_year',
           'profiles.major',
-          db.raw("COALESCE(profiles.gender, activity_registrations.guest_data->>'gender') as gender"),
-          db.raw("COALESCE(profiles.whatsapp, activity_registrations.guest_data->>'whatsapp') as whatsapp"),
+          db.raw(
+            "COALESCE(profiles.gender, activity_registrations.guest_data->>'gender') as gender"
+          ),
+          db.raw(
+            "COALESCE(profiles.whatsapp, activity_registrations.guest_data->>'whatsapp') as whatsapp"
+          ),
           'profiles.instagram',
           'profiles.line',
           'profiles.personal_id',
@@ -378,12 +384,11 @@ export default class ActivityRegistrationsController {
           ACTIVITY_TYPE_SPECIAL.includes(activityType) &&
           status === ACTIVITY_REGISTRANT_STATUS_ENUM.LULUS_KEGIATAN
         ) {
-          const userIds = (
-            await ActivityRegistration.query({ client: trx })
-              .select('user_id')
-              .whereIn('id', ids)
-              .paginate(1, ids.length)
-          ).all()
+          const paginatedRegistrations = await ActivityRegistration.query({ client: trx })
+            .select('user_id')
+            .whereIn('id', ids)
+            .paginate(1, ids.length)
+          const userIds = paginatedRegistrations.all()
 
           const resolvedUserIds = userIds
             .map((user) => user.userId)
@@ -583,7 +588,7 @@ export default class ActivityRegistrationsController {
       }
 
       // Check if activity has a custom form attached
-      const CustomForm = (await import('#models/custom_form')).default
+      const { default: CustomForm } = await import('#models/custom_form')
       const customForm = await CustomForm.query()
         .where('feature_type', 'activity_registration')
         .where('feature_id', activityId)

@@ -27,7 +27,7 @@ export default class UpdateClubVisibility extends BaseCommand {
 
       logger.info('Completed: Updated club visibility')
       logger.info(`Updated ${expiredClubs.length} club(s)`)
-      
+
       for (let club of expiredClubs) {
         logger.info(`Club ID ${club.id} (${club.name}) - Period ended: ${club.end_period}`)
       }

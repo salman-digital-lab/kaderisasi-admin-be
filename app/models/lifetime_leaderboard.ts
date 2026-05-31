@@ -32,4 +32,4 @@ export default class LifetimeLeaderboard extends BaseModel {
     foreignKey: 'userId',
   })
   declare user: BelongsTo<typeof PublicUser>
-} 
+}

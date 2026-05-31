@@ -1,9 +1,6 @@
 import { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
-import {
-  buildCertificateData,
-  buildBulkCertificateData,
-} from '#services/certificate_service'
+import { buildCertificateData, buildBulkCertificateData } from '#services/certificate_service'
 
 const generateCertificatesValidator = vine.compile(
   vine.object({
@@ -27,9 +24,10 @@ export default class CertificatesController {
       const result = await buildBulkCertificateData(payload.activity_id, status)
 
       if (!result.success) {
-        const httpStatus = result.error === 'ACTIVITY_NOT_FOUND' || result.error === 'CERTIFICATE_TEMPLATE_NOT_FOUND'
-          ? 404
-          : 400
+        const httpStatus =
+          result.error === 'ACTIVITY_NOT_FOUND' || result.error === 'CERTIFICATE_TEMPLATE_NOT_FOUND'
+            ? 404
+            : 400
         if (httpStatus === 404) {
           return response.notFound({ message: result.error })
         }
@@ -66,9 +64,12 @@ export default class CertificatesController {
       const result = await buildCertificateData(payload.registration_id)
 
       if (!result.success) {
-        const httpStatus = result.error === 'REGISTRATION_NOT_FOUND' || result.error === 'ACTIVITY_NOT_FOUND' || result.error === 'CERTIFICATE_TEMPLATE_NOT_FOUND'
-          ? 404
-          : 400
+        const httpStatus =
+          result.error === 'REGISTRATION_NOT_FOUND' ||
+          result.error === 'ACTIVITY_NOT_FOUND' ||
+          result.error === 'CERTIFICATE_TEMPLATE_NOT_FOUND'
+            ? 404
+            : 400
         if (httpStatus === 404) {
           return response.notFound({ message: result.error })
         }

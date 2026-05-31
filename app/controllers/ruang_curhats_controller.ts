@@ -25,25 +25,23 @@ export default class RuangCurhatController {
 
       // Optimize: Combine name and gender filters in a single whereHas to reduce subqueries
       if (name || gender) {
-        ruangCurhatRaw = ruangCurhatRaw
-          .whereHas('publicUser', (publicUserQuery) => {
-            publicUserQuery.whereHas('profile', (profileQuery) => {
-              if (name) {
-                profileQuery.whereILike('name', `%${name}%`)
-              }
-              if (gender) {
-                profileQuery.where('gender', gender)
-              }
-            })
+        ruangCurhatRaw = ruangCurhatRaw.whereHas('publicUser', (publicUserQuery) => {
+          publicUserQuery.whereHas('profile', (profileQuery) => {
+            if (name) {
+              profileQuery.whereILike('name', `%${name}%`)
+            }
+            if (gender) {
+              profileQuery.where('gender', gender)
+            }
           })
+        })
       }
 
       // Filter by admin user display name
       if (adminDisplayName) {
-        ruangCurhatRaw = ruangCurhatRaw
-          .whereHas('adminUser', (adminUserQuery) => {
-            adminUserQuery.whereILike('display_name', `%${adminDisplayName}%`)
-          })
+        ruangCurhatRaw = ruangCurhatRaw.whereHas('adminUser', (adminUserQuery) => {
+          adminUserQuery.whereILike('display_name', `%${adminDisplayName}%`)
+        })
       }
 
       const ruangCurhat = await ruangCurhatRaw.orderBy('created_at', 'desc').paginate(page, perPage)

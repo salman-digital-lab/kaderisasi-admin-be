@@ -12,7 +12,7 @@ export default class extends BaseSchema {
     this.schema.alterTable(this.tableName, (table) => {
       // Add the feature_type column back with the new enum values
       table.enum('feature_type', ['activity_registration', 'club_registration', 'independent_form'])
-      
+
       // Make feature_id nullable
       table.integer('feature_id').nullable().alter()
     })
@@ -26,7 +26,7 @@ export default class extends BaseSchema {
 
     this.schema.alterTable(this.tableName, (table) => {
       table.enum('feature_type', ['activity_registration', 'club_registration'])
-      
+
       // Revert feature_id to not nullable
       table.integer('feature_id').notNullable().alter()
     })

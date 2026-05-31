@@ -22,8 +22,10 @@ export default class extends BaseSchema {
     // Alter clubs table to add all registration-related fields
     this.schema.alterTable(this.tableName, (table) => {
       // Add registration_info field
-      table.jsonb('registration_info').defaultTo('{"registration_info": "", "after_registration_info": ""}')
-      
+      table
+        .jsonb('registration_info')
+        .defaultTo('{"registration_info": "", "after_registration_info": ""}')
+
       // Add registration control fields
       table.boolean('is_registration_open').defaultTo(false)
       table.date('registration_end_date').nullable()

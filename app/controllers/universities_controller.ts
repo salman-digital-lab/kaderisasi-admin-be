@@ -50,7 +50,7 @@ export default class UniversitiesController {
     try {
       const university = await University.create({
         name: name,
-        provinceId: provinceId
+        provinceId: provinceId,
       })
 
       return response.ok({
@@ -70,10 +70,12 @@ export default class UniversitiesController {
     try {
       const id: number = params.id
       const university = await University.findOrFail(id)
-      const updated = await university.merge({
-        name: name,
-        provinceId: provinceId
-      }).save()
+      const updated = await university
+        .merge({
+          name: name,
+          provinceId: provinceId,
+        })
+        .save()
 
       return response.ok({
         message: 'UPDATE_DATA_SUCCESS',

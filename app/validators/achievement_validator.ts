@@ -10,4 +10,4 @@ export const updateAchievementValidator = vine.compile(
     status: vine.number().withoutDecimals().optional(),
     remark: vine.string().optional(),
   })
-) 
+)

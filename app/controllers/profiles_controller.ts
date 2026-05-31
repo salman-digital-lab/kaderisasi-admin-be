@@ -17,9 +17,9 @@ export default class ProfilesController {
 
       let query = Profile.query()
         .select('*')
-        .where((query) => {
+        .where((builder) => {
           if (search) {
-            query
+            builder
               .where('name', 'ILIKE', '%' + search + '%')
               .orWhereHas('publicUser', (subQuery) => {
                 subQuery
@@ -28,12 +28,12 @@ export default class ProfilesController {
               })
           }
           if (memberId) {
-            query.whereHas('publicUser', (subQuery) => {
+            builder.whereHas('publicUser', (subQuery) => {
               subQuery.where('member_id', memberId)
             })
           }
           if (educationInstitution) {
-            query.whereRaw(
+            builder.whereRaw(
               `EXISTS (
                 SELECT 1 FROM jsonb_array_elements(COALESCE(education_history, '[]'::jsonb)) AS edu
                 WHERE edu->>'institution' ILIKE ?
@@ -128,7 +128,10 @@ export default class ProfilesController {
       }
 
       if (payload.extra_data) {
-        payload.extra_data = { ...(profile.extraData ?? {}), ...payload.extra_data } as typeof payload.extra_data
+        payload.extra_data = {
+          ...(profile.extraData ?? {}),
+          ...payload.extra_data,
+        } as typeof payload.extra_data
       }
 
       const updated = await profile.merge(payload).save()

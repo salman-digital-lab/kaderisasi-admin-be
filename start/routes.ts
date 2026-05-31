@@ -16,8 +16,7 @@ const LeaderboardsController = () => import('#controllers/leaderboards_controlle
 const ClubsController = () => import('#controllers/clubs_controller')
 const ClubRegistrationsController = () => import('#controllers/club_registrations_controller')
 const CustomFormsController = () => import('#controllers/custom_forms_controller')
-const CertificateTemplatesController = () =>
-  import('#controllers/certificate_templates_controller')
+const CertificateTemplatesController = () => import('#controllers/certificate_templates_controller')
 const CertificatesController = () => import('#controllers/certificates_controller')
 const MembersController = () => import('#controllers/members_controller')
 const CountriesController = () => import('#controllers/countries_controller')

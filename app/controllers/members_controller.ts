@@ -45,7 +45,6 @@ export default class MembersController {
         }
         await user.save()
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         profile = await (user as any).related('profile').create({
           name: payload.name,
           gender: payload.gender ?? null,

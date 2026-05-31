@@ -7,9 +7,26 @@ import {
   updateClubRegistrationValidator,
   bulkUpdateClubRegistrationsValidator,
 } from '#validators/club_registration_validator'
+import { USER_LEVEL_ENUM } from '../../types/constants/profile.js'
 import ExcelJS from 'exceljs'
 
 export default class ClubRegistrationsController {
+  // Convert the numeric profile level into a human-readable kaderisasi level label
+  private getLevelLabel(level: number): string {
+    switch (level) {
+      case USER_LEVEL_ENUM.JAMAAH:
+        return 'JAMAAH'
+      case USER_LEVEL_ENUM.AKTIVIS:
+        return 'AKTIVIS'
+      case USER_LEVEL_ENUM.KADER:
+        return 'KADER'
+      case USER_LEVEL_ENUM.KADER_LANJUT:
+        return 'KADER LANJUT'
+      default:
+        return String(level)
+    }
+  }
+
   /**
    * Get all registrations for a specific club
    */
@@ -24,8 +41,8 @@ export default class ClubRegistrationsController {
 
       const query = ClubRegistration.query()
         .where('club_id', club.id)
-        .preload('member', (query) => {
-          query.preload('profile')
+        .preload('member', (memberQuery) => {
+          memberQuery.preload('profile')
         })
         .orderBy('created_at', 'desc')
 
@@ -230,12 +247,15 @@ export default class ClubRegistrationsController {
       const registrations = await ClubRegistration.query()
         .where('club_id', club.id)
         .preload('member', (query) => {
-          query.preload('profile')
+          query.preload('profile', (profileQuery) => {
+            profileQuery.preload('province')
+            profileQuery.preload('university')
+          })
         })
         .orderBy('created_at', 'desc')
 
       // Check if club has a custom form attached
-      const CustomForm = (await import('#models/custom_form')).default
+      const { default: CustomForm } = await import('#models/custom_form')
       const customForm = await CustomForm.query()
         .where('feature_type', 'club_registration')
         .where('feature_id', clubId)
@@ -253,6 +273,7 @@ export default class ClubRegistrationsController {
         'Universitas',
         'Jurusan',
         'Tahun Masuk',
+        'Jenjang',
         'Status',
         'Tanggal Pendaftaran',
       ]
@@ -308,6 +329,7 @@ export default class ClubRegistrationsController {
           profile?.university?.name || '',
           profile?.major || '',
           profile?.intakeYear || '',
+          profile ? this.getLevelLabel(profile.level || 0) : '',
           registration.status,
           registration.createdAt.toFormat('yyyy-MM-dd HH:mm:ss'),
         ]

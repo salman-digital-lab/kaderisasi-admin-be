@@ -6,8 +6,8 @@ export enum USER_LEVEL_ENUM {
 }
 
 export enum GENDER {
-  Female = "F",
-  Male = "M",
+  Female = 'F',
+  Male = 'M',
 }
 
 export enum ADMIN_ROLE_ENUM {
