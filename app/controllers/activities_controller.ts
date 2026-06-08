@@ -46,7 +46,8 @@ export default class ActivitiesController {
           'selection_end',
           'activity_type',
           'activity_category',
-          'is_published'
+          'is_published',
+          'is_registration_open'
         )
         .orderBy('isPublished', 'desc')
         .orderBy('createdAt', 'desc')
