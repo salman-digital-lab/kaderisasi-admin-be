@@ -149,6 +149,7 @@ router
     router
       .group(() => {
         router.get('', [LeaderboardsController, 'index'])
+        router.get('export', [LeaderboardsController, 'export'])
         router.get(':id', [LeaderboardsController, 'show'])
         router.put(':id', [LeaderboardsController, 'update'])
         router.put(':id/approve-reject', [LeaderboardsController, 'approveReject'])

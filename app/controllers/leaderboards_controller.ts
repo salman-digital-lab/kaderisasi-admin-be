@@ -6,18 +6,111 @@ import { DateTime } from 'luxon'
 import { updateAchievementValidator } from '#validators/achievement_validator'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import ExcelJS from 'exceljs'
 
 enum ACHIEVEMENT_TYPE_ENUM {
   KOMPETENSI,
   ORGANISASI,
   AKADEMIK,
 }
+
+enum ACHIEVEMENT_STATUS_ENUM {
+  PENDING,
+  APPROVED,
+  REJECTED,
+}
+
+const ACHIEVEMENT_EXPORT_HEADERS = [
+  'No',
+  'Nama Prestasi',
+  'Nama',
+  'Email',
+  'Kategori',
+  'Skor',
+  'Status',
+  'Tanggal Prestasi',
+  'Tanggal Dibuat',
+  'Disetujui Oleh',
+  'Tanggal Persetujuan',
+  'Catatan',
+  'Deskripsi',
+  'Bukti',
+]
+
+const ACHIEVEMENT_SORT_COLUMNS: Record<string, string> = {
+  achievement_date: 'achievement_date',
+  created_at: 'created_at',
+}
+
 export default class LeaderboardsController {
+  private renderAchievementType(type: number): string {
+    switch (type) {
+      case ACHIEVEMENT_TYPE_ENUM.KOMPETENSI:
+        return 'Kompetensi'
+      case ACHIEVEMENT_TYPE_ENUM.ORGANISASI:
+        return 'Organisasi'
+      case ACHIEVEMENT_TYPE_ENUM.AKADEMIK:
+        return 'Akademik'
+      default:
+        return String(type)
+    }
+  }
+
+  private renderAchievementStatus(status: number): string {
+    switch (status) {
+      case ACHIEVEMENT_STATUS_ENUM.PENDING:
+        return 'Menunggu Persetujuan'
+      case ACHIEVEMENT_STATUS_ENUM.APPROVED:
+        return 'Diterima'
+      case ACHIEVEMENT_STATUS_ENUM.REJECTED:
+        return 'Ditolak'
+      default:
+        return String(status)
+    }
+  }
+
+  private formatDate(date?: DateTime | null): string {
+    return date?.toFormat('dd LLLL yyyy') ?? ''
+  }
+
+  private buildAchievementExportRow(
+    rowNumber: number,
+    achievement: Achievement
+  ): Array<string | number> {
+    return [
+      rowNumber,
+      achievement.name,
+      achievement.user?.profile?.name || '',
+      achievement.user?.email || '',
+      this.renderAchievementType(achievement.type),
+      achievement.score,
+      this.renderAchievementStatus(achievement.status),
+      this.formatDate(achievement.achievementDate),
+      this.formatDate(achievement.createdAt),
+      achievement.approver?.displayName || '',
+      this.formatDate(achievement.approvedAt),
+      achievement.remark || '',
+      achievement.description || '',
+      achievement.proof || '',
+    ]
+  }
+
   /**
    * Get all achievements with optional filters
    */
   async index({ request, response }: HttpContext) {
-    const { page = 1, per_page: perPage = 10, status, email, type, name } = request.qs()
+    const {
+      page = 1,
+      per_page: perPage = 10,
+      status,
+      email,
+      type,
+      name,
+      sort_by: sortBy = 'created_at',
+      sort_order: sortOrder = 'desc',
+    } = request.qs()
+    const sortColumn = ACHIEVEMENT_SORT_COLUMNS[sortBy] ?? 'created_at'
+    const sortDirection = sortOrder === 'asc' ? 'asc' : 'desc'
 
     try {
       const query = Achievement.query()
@@ -45,11 +138,69 @@ export default class LeaderboardsController {
         query.where('type', type)
       }
 
+      query.orderBy(sortColumn, sortDirection)
+
       const achievements = await query.paginate(page, perPage)
       return response.ok({
         message: 'GET_DATA_SUCCESS',
         data: achievements,
       })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Export all achievements to XLSX
+   */
+  async export({ response }: HttpContext) {
+    try {
+      const achievements = await Achievement.query()
+        .preload('user', (userQuery) => {
+          userQuery.preload('profile')
+        })
+        .preload('approver')
+        .orderBy('created_at', 'desc')
+
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Achievements')
+
+      worksheet.addRow(ACHIEVEMENT_EXPORT_HEADERS)
+
+      const headerRow = worksheet.getRow(1)
+      headerRow.font = { bold: true }
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      }
+
+      for (const [i, achievement] of achievements.entries()) {
+        worksheet.addRow(this.buildAchievementExportRow(i + 1, achievement))
+      }
+
+      worksheet.columns.forEach((column) => {
+        let maxLength = 0
+        column.eachCell?.({ includeEmpty: true }, (cell) => {
+          const columnLength = cell.value ? cell.value.toString().length : 10
+          if (columnLength > maxLength) {
+            maxLength = columnLength
+          }
+        })
+        column.width = maxLength < 10 ? 10 : maxLength > 50 ? 50 : maxLength + 2
+      })
+
+      const buffer = await workbook.xlsx.writeBuffer()
+      const fileName = `achievements-${DateTime.now().toFormat('yyyy-LL-dd')}.xlsx`
+
+      return response
+        .status(200)
+        .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .header('Content-Disposition', `attachment; filename="${fileName}"`)
+        .send(buffer)
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
