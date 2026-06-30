@@ -5,6 +5,21 @@ import Profile from '#models/profile'
 import { updateProfileValidator } from '#validators/profile_validator'
 import { regionalAssignmentValidator } from '#validators/member_validator'
 
+const educationHistoryArrayExpression = `
+  CASE
+    WHEN jsonb_typeof(education_history) = 'array' THEN education_history
+    ELSE '[]'::jsonb
+  END
+`
+
+const badgesArrayExpression = `
+  CASE
+    WHEN jsonb_typeof(badges) = 'array' THEN badges
+    WHEN jsonb_typeof(badges) = 'string' THEN jsonb_build_array(badges #>> '{}')
+    ELSE '[]'::jsonb
+  END
+`
+
 export default class ProfilesController {
   async index({ request, response }: HttpContext) {
     try {
@@ -35,7 +50,7 @@ export default class ProfilesController {
           if (educationInstitution) {
             builder.whereRaw(
               `EXISTS (
-                SELECT 1 FROM jsonb_array_elements(COALESCE(education_history, '[]'::jsonb)) AS edu
+                SELECT 1 FROM jsonb_array_elements(${educationHistoryArrayExpression}) AS edu
                 WHERE edu->>'institution' ILIKE ?
               )`,
               [`%${educationInstitution}%`]
@@ -48,7 +63,7 @@ export default class ProfilesController {
       if (badge) {
         query = query.whereRaw(
           `EXISTS (
-          SELECT 1 FROM jsonb_array_elements_text(badges) badge
+          SELECT 1 FROM jsonb_array_elements_text(${badgesArrayExpression}) badge
           WHERE badge ILIKE ?
         )`,
           [`%${badge}%`]

@@ -125,7 +125,7 @@ export default class Profile extends BaseModel {
   declare level: number
 
   @column({
-    prepare: (value: string[] | null | undefined) => JSON.stringify(value ?? []),
+    prepare: (value: unknown) => JSON.stringify(normalizeStringArray(value)),
     consume: (value: unknown) => normalizeStringArray(value),
   })
   declare badges: string[]
