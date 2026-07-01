@@ -18,26 +18,56 @@ import {
 import PublicUser from '#models/public_user'
 import { USER_LEVEL_ENUM } from '../../types/constants/profile.js'
 import ExcelJS from 'exceljs'
+import Province from '#models/province'
+import City from '#models/city'
+import University from '#models/university'
 
 type ExportEducationEntry = {
+  degree?: string
   institution?: string
   faculty?: string
   major?: string
   intake_year?: number
 }
 
+type ExportWorkEntry = {
+  job_title?: string
+  company?: string
+  start_year?: number
+  end_year?: number
+}
+
 type ExportRegistrantIdentity = {
   name: string
   email: string
+  picture: string
   whatsapp: string
   gender: string
   personalId: string
+  birthDate: string
   line: string
   instagram: string
   tiktok: string
   linkedin: string
   province: string
+  city: string
+  country: string
+  originProvince: string
+  originCity: string
+  university: string
+  major: string
+  intakeYear: string
   level: string
+  profileBadges: string
+  educationHistory: string
+  workHistory: string
+  extraData: string
+}
+
+type ExportLocationMaps = {
+  provinces: Map<number, string>
+  cities: Map<number, string>
+  universities: Map<number, string>
 }
 
 const REGISTRATION_EXPORT_HEADERS = [
@@ -45,21 +75,207 @@ const REGISTRATION_EXPORT_HEADERS = [
   'Nama Lengkap',
   'Jenis Kelamin',
   'Email',
+  'Foto Profil',
   'Whatsapp',
   'Nomor Identitas',
+  'Tanggal Lahir',
   'Line ID',
   'Instagram',
   'TikTok',
   'LinkedIn',
-  'Provinsi',
+  'Provinsi Domisili',
+  'Kota Domisili',
+  'Negara Domisili',
+  'Provinsi Asal',
+  'Kota Asal',
+  'Kampus/Universitas Profil',
+  'Jurusan Profil',
+  'Tahun Masuk Profil',
   'Institusi Pendidikan Saat Ini',
   'Fakultas Pendidikan Saat Ini',
   'Jurusan Pendidikan Saat Ini',
   'Tahun Masuk Pendidikan Saat Ini',
+  'Riwayat Pendidikan',
+  'Riwayat Pekerjaan',
+  'Data Tambahan',
   'Jenjang',
+  'Lencana Profil',
+  'Lencana Kegiatan',
 ]
 
 export default class ActivityRegistrationsController {
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+  }
+
+  private getErrorStack(error: unknown): string {
+    return error instanceof Error ? error.stack || error.message : String(error)
+  }
+
+  private stringifyValue(value: unknown): string {
+    if (value === null || value === undefined) {
+      return ''
+    }
+
+    if (typeof value === 'string') {
+      return value
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value)
+    }
+
+    return JSON.stringify(value)
+  }
+
+  private getStringValue(value: unknown): string {
+    return this.stringifyValue(value)
+  }
+
+  private getGuestStringValue(guestData: Record<string, unknown> | null, key: string): string {
+    return this.getStringValue(guestData?.[key])
+  }
+
+  private formatDate(value: Date | string | null | undefined): string {
+    if (!value) {
+      return ''
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString().split('T')[0]
+    }
+
+    return value.split('T')[0]
+  }
+
+  private formatEducationEntry(entry: ExportEducationEntry): string {
+    return [
+      entry.degree,
+      entry.institution,
+      entry.faculty,
+      entry.major,
+      entry.intake_year ? String(entry.intake_year) : undefined,
+    ]
+      .filter(Boolean)
+      .join(' - ')
+  }
+
+  private formatEducationHistory(value: unknown): string {
+    if (!Array.isArray(value)) {
+      return this.stringifyValue(value)
+    }
+
+    return value
+      .map((entry) => this.formatEducationEntry(entry as ExportEducationEntry))
+      .filter(Boolean)
+      .join('; ')
+  }
+
+  private formatWorkEntry(entry: ExportWorkEntry): string {
+    return [
+      entry.job_title,
+      entry.company,
+      entry.start_year ? String(entry.start_year) : undefined,
+      entry.end_year ? String(entry.end_year) : undefined,
+    ]
+      .filter(Boolean)
+      .join(' - ')
+  }
+
+  private formatWorkHistory(value: unknown): string {
+    if (!Array.isArray(value)) {
+      return this.stringifyValue(value)
+    }
+
+    return value
+      .map((entry) => this.formatWorkEntry(entry as ExportWorkEntry))
+      .filter(Boolean)
+      .join('; ')
+  }
+
+  private getNumericGuestValue(
+    guestData: Record<string, unknown> | null,
+    key: string
+  ): number | null {
+    const value = guestData?.[key]
+
+    if (typeof value === 'number') {
+      return value
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value)
+      return Number.isNaN(parsed) ? null : parsed
+    }
+
+    return null
+  }
+
+  private getLocationName(
+    profileValue: string | undefined,
+    guestData: Record<string, unknown> | null,
+    guestKey: string,
+    locationMap: Map<number, string>
+  ): string {
+    if (profileValue) {
+      return profileValue
+    }
+
+    const guestId = this.getNumericGuestValue(guestData, guestKey)
+    return guestId ? locationMap.get(guestId) || '' : ''
+  }
+
+  private async getGuestLocationMaps(
+    registrations: ActivityRegistration[]
+  ): Promise<ExportLocationMaps> {
+    const provinceIds = new Set<number>()
+    const cityIds = new Set<number>()
+    const universityIds = new Set<number>()
+
+    for (const registration of registrations) {
+      if (registration.userId !== null) {
+        continue
+      }
+
+      const provinceId = this.getNumericGuestValue(registration.guestData, 'province_id')
+      const cityId = this.getNumericGuestValue(registration.guestData, 'city_id')
+      const originProvinceId = this.getNumericGuestValue(
+        registration.guestData,
+        'origin_province_id'
+      )
+      const originCityId = this.getNumericGuestValue(registration.guestData, 'origin_city_id')
+      const universityId = this.getNumericGuestValue(registration.guestData, 'university_id')
+
+      if (provinceId) {
+        provinceIds.add(provinceId)
+      }
+      if (cityId) {
+        cityIds.add(cityId)
+      }
+      if (originProvinceId) {
+        provinceIds.add(originProvinceId)
+      }
+      if (originCityId) {
+        cityIds.add(originCityId)
+      }
+      if (universityId) {
+        universityIds.add(universityId)
+      }
+    }
+
+    const [provinces, cities, universities] = await Promise.all([
+      provinceIds.size > 0 ? Province.query().whereIn('id', [...provinceIds]) : [],
+      cityIds.size > 0 ? City.query().whereIn('id', [...cityIds]) : [],
+      universityIds.size > 0 ? University.query().whereIn('id', [...universityIds]) : [],
+    ])
+
+    return {
+      provinces: new Map(provinces.map((province) => [province.id, province.name])),
+      cities: new Map(cities.map((city) => [city.id, city.name])),
+      universities: new Map(universities.map((university) => [university.id, university.name])),
+    }
+  }
+
   private getCurrentEducationEntry(
     profile?: Profile | null,
     guestData?: Record<string, unknown> | null
@@ -76,54 +292,110 @@ export default class ActivityRegistrationsController {
 
   private getRegistrantIdentity(
     registration: ActivityRegistration,
-    profile?: Profile | null
+    profile: Profile | null | undefined,
+    locationMaps: ExportLocationMaps
   ): ExportRegistrantIdentity {
     const isGuest = registration.userId === null
     const guestData = registration.guestData
 
     return {
-      name: (isGuest ? guestData?.name : profile?.name) || '',
-      email: (isGuest ? guestData?.email : registration.publicUser?.email) || '',
-      whatsapp: (isGuest ? guestData?.whatsapp : profile?.whatsapp) || '',
+      name: isGuest ? this.getGuestStringValue(guestData, 'name') : profile?.name || '',
+      email: isGuest
+        ? this.getGuestStringValue(guestData, 'email')
+        : registration.publicUser?.email || '',
+      picture: profile?.picture || '',
+      whatsapp: isGuest ? this.getGuestStringValue(guestData, 'whatsapp') : profile?.whatsapp || '',
       gender: profile?.gender || '',
       personalId: profile?.personal_id || '',
+      birthDate: this.formatDate(
+        isGuest ? this.getGuestStringValue(guestData, 'birth_date') : profile?.birthDate
+      ),
       line: profile?.line || '',
       instagram: profile?.instagram || '',
       tiktok: profile?.tiktok || '',
       linkedin: profile?.linkedin || '',
-      province: profile?.province?.name || '',
+      province: this.getLocationName(
+        profile?.province?.name,
+        guestData,
+        'province_id',
+        locationMaps.provinces
+      ),
+      city: this.getLocationName(profile?.city?.name, guestData, 'city_id', locationMaps.cities),
+      country: isGuest ? this.getGuestStringValue(guestData, 'country') : profile?.country || '',
+      originProvince: this.getLocationName(
+        profile?.originProvince?.name,
+        guestData,
+        'origin_province_id',
+        locationMaps.provinces
+      ),
+      originCity: this.getLocationName(
+        profile?.originCity?.name,
+        guestData,
+        'origin_city_id',
+        locationMaps.cities
+      ),
+      university: this.getLocationName(
+        profile?.university?.name,
+        guestData,
+        'university_id',
+        locationMaps.universities
+      ),
+      major: isGuest ? this.getGuestStringValue(guestData, 'major') : profile?.major || '',
+      intakeYear: String((isGuest ? guestData?.intake_year : profile?.intakeYear) || ''),
       level: isGuest ? 'Tamu' : this.getLevelLabel(profile?.level || 0),
+      profileBadges: profile?.badges?.join(', ') || '',
+      educationHistory: this.formatEducationHistory(
+        isGuest ? guestData?.education_history : profile?.educationHistory
+      ),
+      workHistory: this.formatWorkHistory(profile?.workHistory),
+      extraData: this.stringifyValue(profile?.extraData),
     }
   }
 
   private buildRegistrationExportRow(
     rowNumber: number,
     registration: ActivityRegistration,
-    questionKeys: string[]
+    questionKeys: string[],
+    activityBadge: string,
+    locationMaps: ExportLocationMaps
   ): Array<string | number> {
     const profile = registration.publicUser?.profile
-    const identity = this.getRegistrantIdentity(registration, profile)
+    const identity = this.getRegistrantIdentity(registration, profile, locationMaps)
     const currentEducation = this.getCurrentEducationEntry(profile, registration.guestData)
     const answers = registration.questionnaireAnswer
-    const answerValues = questionKeys.map((key) => answers[key] || '')
+    const answerValues = questionKeys.map((key) => this.getStringValue(answers[key]))
 
     return [
       rowNumber,
       identity.name,
       identity.gender,
       identity.email,
+      identity.picture,
       identity.whatsapp,
       identity.personalId,
+      identity.birthDate,
       identity.line,
       identity.instagram,
       identity.tiktok,
       identity.linkedin,
       identity.province,
+      identity.city,
+      identity.country,
+      identity.originProvince,
+      identity.originCity,
+      identity.university,
+      identity.major,
+      identity.intakeYear,
       currentEducation?.institution || '',
       currentEducation?.faculty || '',
       currentEducation?.major || '',
       currentEducation?.intake_year || '',
+      identity.educationHistory,
+      identity.workHistory,
+      identity.extraData,
       identity.level,
+      identity.profileBadges,
+      activityBadge,
       ...answerValues,
     ]
   }
@@ -180,7 +452,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
+        error: this.getErrorMessage(error),
       })
     }
   }
@@ -197,7 +469,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
+        error: this.getErrorMessage(error),
       })
     }
   }
@@ -304,7 +576,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
+        error: this.getErrorMessage(error),
       })
     }
   }
@@ -343,7 +615,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
+        error: this.getErrorMessage(error),
       })
     }
   }
@@ -363,7 +635,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.stack,
+        error: this.getErrorStack(error),
       })
     }
   }
@@ -441,7 +713,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
+        error: this.getErrorMessage(error),
       })
     }
   }
@@ -535,7 +807,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
+        error: this.getErrorMessage(error),
       })
     }
   }
@@ -563,7 +835,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
+        error: this.getErrorMessage(error),
       })
     }
   }
@@ -578,6 +850,9 @@ export default class ActivityRegistrationsController {
           userQuery.preload('profile', (profileQuery) => {
             profileQuery.preload('province')
             profileQuery.preload('city')
+            profileQuery.preload('originProvince')
+            profileQuery.preload('originCity')
+            profileQuery.preload('university')
           })
         })
 
@@ -640,8 +915,17 @@ export default class ActivityRegistrationsController {
       }
 
       // Process each registration (no N+1 query - profile is preloaded)
+      const locationMaps = await this.getGuestLocationMaps(registrations)
       for (const [i, item] of registrations.entries()) {
-        worksheet.addRow(this.buildRegistrationExportRow(i + 1, item, questionKeys))
+        worksheet.addRow(
+          this.buildRegistrationExportRow(
+            i + 1,
+            item,
+            questionKeys,
+            activity.badge || '',
+            locationMaps
+          )
+        )
       }
 
       // Auto-fit columns
@@ -670,7 +954,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.stack,
+        error: this.getErrorStack(error),
       })
     }
   }
@@ -691,7 +975,7 @@ export default class ActivityRegistrationsController {
     } catch (error) {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
+        error: this.getErrorMessage(error),
       })
     }
   }

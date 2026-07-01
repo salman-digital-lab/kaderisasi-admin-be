@@ -17,7 +17,7 @@ export default class ActivityRegistration extends BaseModel {
   declare publicUser: BelongsTo<typeof PublicUser>
 
   @column()
-  declare guestData: Record<string, any> | null
+  declare guestData: Record<string, unknown> | null
 
   @column()
   declare activityId: number
@@ -31,7 +31,7 @@ export default class ActivityRegistration extends BaseModel {
   declare status: string
 
   @column()
-  declare questionnaireAnswer: Record<string, any>
+  declare questionnaireAnswer: Record<string, unknown>
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
