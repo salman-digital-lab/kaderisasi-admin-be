@@ -229,8 +229,15 @@ router
 
     router
       .group(() => {
+        router.get('', [CertificatesController, 'index'])
+        router.get('/code/:code', [CertificatesController, 'showByCode'])
+        router.get('/verify/:code', [CertificatesController, 'verify'])
+        router.post('/issue-single', [CertificatesController, 'issueSingle'])
+        router.post('/issue-bulk', [CertificatesController, 'issueBulk'])
         router.post('/generate', [CertificatesController, 'generate'])
         router.post('/generate-single', [CertificatesController, 'generateSingle'])
+        router.get('/:id', [CertificatesController, 'show'])
+        router.post('/:id/revoke', [CertificatesController, 'revoke'])
       })
       .prefix('certificates')
       .use(middleware.auth())
