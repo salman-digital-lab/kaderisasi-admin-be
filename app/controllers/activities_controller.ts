@@ -22,6 +22,7 @@ export default class ActivitiesController {
         minimum_level?: number
         activity_type?: number
         is_published?: number
+        club_id?: number
       } = {}
 
       if (request.qs().category) clause.activity_category = request.qs().category
@@ -31,6 +32,8 @@ export default class ActivitiesController {
       if (request.qs().activity_type) clause.activity_type = request.qs().activity_type
 
       if (request.qs().is_published) clause.is_published = request.qs().is_published
+
+      if (request.qs().club_id) clause.club_id = request.qs().club_id
 
       const activities = await Activity.query()
         .where(clause)
@@ -46,9 +49,11 @@ export default class ActivitiesController {
           'selection_end',
           'activity_type',
           'activity_category',
+          'club_id',
           'is_published',
           'is_registration_open'
         )
+        .preload('club')
         .orderBy('isPublished', 'desc')
         .orderBy('createdAt', 'desc')
         .paginate(page, perPage)
@@ -68,7 +73,7 @@ export default class ActivitiesController {
   async show({ params, response }: HttpContext) {
     try {
       const id: number = params.id
-      const activityData = await Activity.find(id)
+      const activityData = await Activity.query().where('id', id).preload('club').first()
 
       return response.ok({
         message: 'GET_DATA_SUCCESS',
@@ -204,6 +209,7 @@ export default class ActivitiesController {
         selectionEnd: payload.selection_end
           ? DateTime.fromJSDate(payload.selection_end)
           : undefined,
+        clubId: payload.club_id ?? null,
       })
 
       return response.ok({
@@ -255,6 +261,9 @@ export default class ActivitiesController {
           selectionEnd: payloadWithoutSlug.selection_end
             ? DateTime.fromJSDate(payloadWithoutSlug.selection_end)
             : undefined,
+          ...(payloadWithoutSlug.club_id !== undefined
+            ? { clubId: payloadWithoutSlug.club_id }
+            : {}),
         })
         .save()
 

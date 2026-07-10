@@ -3,6 +3,7 @@ import vine from '@vinejs/vine'
 export const clubValidator = vine.compile(
   vine.object({
     name: vine.string(),
+    club_type: vine.enum(['UKM', 'AVISMAN']).optional(),
     description: vine.string().optional(),
     short_description: vine.string().maxLength(200).optional(),
     logo: vine.string().optional(),
@@ -28,6 +29,7 @@ export const clubValidator = vine.compile(
 export const updateClubValidator = vine.compile(
   vine.object({
     name: vine.string().optional(),
+    club_type: vine.enum(['UKM', 'AVISMAN']).optional(),
     description: vine.string().optional(),
     short_description: vine.string().maxLength(200).optional(),
     logo: vine.string().optional(),

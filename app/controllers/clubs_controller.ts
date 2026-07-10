@@ -18,12 +18,14 @@ export default class ClubsController {
       const page = request.qs().page ?? 1
       const perPage = request.qs().per_page ?? 10
       const search = request.qs().search
+      const clubType = request.qs().club_type
 
-      const clubs = await Club.query()
+      const query = Club.query()
         .where('name', 'ILIKE', search ? '%' + search + '%' : '%%')
         .select(
           'id',
           'name',
+          'club_type',
           'description',
           'short_description',
           'logo',
@@ -31,8 +33,16 @@ export default class ClubsController {
           'updated_at',
           'start_period',
           'end_period',
-          'is_show'
+          'is_show',
+          'is_registration_open',
+          'registration_end_date'
         )
+
+      if (clubType) {
+        query.where('club_type', clubType)
+      }
+
+      const clubs = await query
         .orderBy('is_show', 'desc')
         .orderBy('created_at', 'desc')
         .paginate(page, perPage)
@@ -90,6 +100,7 @@ export default class ClubsController {
       // Convert snake_case to camelCase and handle date conversion
       const createData = {
         name: payload.name,
+        clubType: payload.club_type ?? 'UKM',
         description: payload.description,
         shortDescription: payload.short_description,
         media: payload.media || { items: [] },
@@ -122,6 +133,7 @@ export default class ClubsController {
       const updateData: any = {}
 
       if (payload.name !== undefined) updateData.name = payload.name
+      if (payload.club_type !== undefined) updateData.clubType = payload.club_type
       if (payload.description !== undefined) updateData.description = payload.description
       if (payload.short_description !== undefined)
         updateData.shortDescription = payload.short_description

@@ -12,6 +12,7 @@ export const activityValidator = vine.compile(
     selection_end: vine.date().optional(),
     minimum_level: vine.number().withoutDecimals().positive().optional(),
     activity_type: vine.number().withoutDecimals().positive().optional(),
+    club_id: vine.number().withoutDecimals().positive().nullable().optional(),
     additional_config: vine
       .object({
         custom_selection_status: vine.array(vine.string()),
@@ -48,6 +49,7 @@ export const updateActivityValidator = vine.compile(
     selection_end: vine.date().optional(),
     minimum_level: vine.number().withoutDecimals().positive().optional(),
     activity_type: vine.number().withoutDecimals().positive().optional(),
+    club_id: vine.number().withoutDecimals().positive().nullable().optional(),
     additional_config: vine
       .object({
         custom_selection_status: vine.array(vine.string()),

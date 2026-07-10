@@ -15,6 +15,7 @@ const DashboardController = () => import('#controllers/dashboard_controller')
 const LeaderboardsController = () => import('#controllers/leaderboards_controller')
 const ClubsController = () => import('#controllers/clubs_controller')
 const ClubRegistrationsController = () => import('#controllers/club_registrations_controller')
+const ClubMemberRolesController = () => import('#controllers/club_member_roles_controller')
 const CustomFormsController = () => import('#controllers/custom_forms_controller')
 const CertificateTemplatesController = () => import('#controllers/certificate_templates_controller')
 const CertificatesController = () => import('#controllers/certificates_controller')
@@ -178,15 +179,23 @@ router
         router.put(':id/registration-info', [ClubsController, 'updateRegistrationInfo'])
 
         // Club registrations management
+        router.get(':id/members', [ClubRegistrationsController, 'members'])
         router.get(':id/registrations', [ClubRegistrationsController, 'index'])
         router.post(':id/registrations', [ClubRegistrationsController, 'store'])
         router.get(':id/registrations/export', [ClubRegistrationsController, 'export'])
+
+        // Club role assignments
+        router.get(':id/member-roles', [ClubMemberRolesController, 'index'])
+        router.get(':id/member-role-suggestions', [ClubMemberRolesController, 'suggestions'])
+        router.post(':id/member-roles', [ClubMemberRolesController, 'store'])
       })
       .prefix('clubs')
       .use(middleware.auth())
 
     router
       .group(() => {
+        router.put('member-roles/:id', [ClubMemberRolesController, 'update'])
+        router.delete('member-roles/:id', [ClubMemberRolesController, 'destroy'])
         router.put('bulk-update', [ClubRegistrationsController, 'bulkUpdate'])
         router.get(':id', [ClubRegistrationsController, 'show'])
         router.put(':id', [ClubRegistrationsController, 'update'])

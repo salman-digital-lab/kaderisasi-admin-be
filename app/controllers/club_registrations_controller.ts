@@ -44,6 +44,9 @@ export default class ClubRegistrationsController {
         .preload('member', (memberQuery) => {
           memberQuery.preload('profile')
         })
+        .preload('roles', (roleQuery) => {
+          roleQuery.orderBy('sort_order', 'asc').orderBy('is_primary', 'desc')
+        })
         .orderBy('created_at', 'desc')
 
       if (status) {
@@ -55,6 +58,56 @@ export default class ClubRegistrationsController {
       return response.ok({
         message: 'CLUB_REGISTRATIONS_RETRIEVED',
         data: registrations,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'GENERAL_ERROR',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Get approved members for a specific club.
+   */
+  async members({ params, request, response }: HttpContext) {
+    try {
+      const clubId = params.id
+      const page = request.input('page', 1)
+      const limit = request.input('limit', 20)
+      const search = request.input('search')
+
+      const club = await Club.findOrFail(clubId)
+
+      const query = ClubRegistration.query()
+        .where('club_id', club.id)
+        .where('status', 'APPROVED')
+        .preload('member', (memberQuery) => {
+          memberQuery.preload('profile')
+        })
+        .preload('roles', (roleQuery) => {
+          roleQuery
+            .orderBy('sort_order', 'asc')
+            .orderBy('is_primary', 'desc')
+            .orderBy('created_at', 'asc')
+        })
+        .orderBy('created_at', 'desc')
+
+      if (search) {
+        query.whereHas('member', (memberQuery) => {
+          memberQuery
+            .where('email', 'ILIKE', `%${search}%`)
+            .orWhereHas('profile', (profileQuery) => {
+              profileQuery.where('name', 'ILIKE', `%${search}%`)
+            })
+        })
+      }
+
+      const members = await query.paginate(page, limit)
+
+      return response.ok({
+        message: 'CLUB_MEMBERS_RETRIEVED',
+        data: members,
       })
     } catch (error) {
       return response.internalServerError({
@@ -120,6 +173,9 @@ export default class ClubRegistrationsController {
         .where('id', registrationId)
         .preload('member', (query) => {
           query.preload('profile')
+        })
+        .preload('roles', (query) => {
+          query.orderBy('sort_order', 'asc').orderBy('is_primary', 'desc')
         })
         .preload('club')
         .firstOrFail()
