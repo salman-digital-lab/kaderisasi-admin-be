@@ -3,6 +3,7 @@ import drive from '@adonisjs/drive/services/main'
 import { DateTime } from 'luxon'
 
 import Club, { type MediaItem } from '#models/club'
+import CustomForm from '#models/custom_form'
 import {
   clubValidator,
   updateClubValidator,
@@ -71,7 +72,6 @@ export default class ClubsController {
       }
 
       // Get attached custom form if any
-      const { default: CustomForm } = await import('#models/custom_form')
       const attachedForm = await CustomForm.query()
         .where('featureType', 'club_registration')
         .where('featureId', id)
@@ -128,6 +128,18 @@ export default class ClubsController {
     try {
       const id: number = params.id
       const clubData = await Club.findOrFail(id)
+
+      if (payload.is_registration_open === true) {
+        const activeCustomForm = await CustomForm.query()
+          .where('featureType', 'club_registration')
+          .where('featureId', id)
+          .where('isActive', true)
+          .first()
+
+        if (!activeCustomForm) {
+          return response.badRequest({ message: 'ACTIVE_CUSTOM_FORM_REQUIRED' })
+        }
+      }
 
       // Convert snake_case to camelCase and handle date conversion
       const updateData: any = {}
@@ -381,7 +393,6 @@ export default class ClubsController {
 
       const registrationInfo = {
         registration_info: payload.registration_info || '',
-        after_registration_info: payload.after_registration_info || '',
       }
 
       await club.merge({ registrationInfo }).save()

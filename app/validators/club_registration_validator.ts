@@ -29,6 +29,5 @@ export const bulkUpdateClubRegistrationsValidator = vine.compile(
 export const updateClubRegistrationInfoValidator = vine.compile(
   vine.object({
     registration_info: vine.string().trim().optional(),
-    after_registration_info: vine.string().trim().optional(),
   })
 )

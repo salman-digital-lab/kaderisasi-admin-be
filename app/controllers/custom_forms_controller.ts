@@ -5,6 +5,13 @@ import Club from '#models/club'
 import { customFormValidator, updateCustomFormValidator } from '#validators/custom_form_validator'
 
 export default class CustomFormsController {
+  private async isAttachedToOpenClub(customForm: CustomForm): Promise<boolean> {
+    if (customForm.featureType !== 'club_registration' || !customForm.featureId) return false
+
+    const club = await Club.find(customForm.featureId)
+    return club?.isRegistrationOpen === true
+  }
+
   async index({ request, response }: HttpContext) {
     try {
       const page = request.qs().page ?? 1
@@ -108,6 +115,15 @@ export default class CustomFormsController {
 
       const payload = await request.validateUsing(updateCustomFormValidator)
 
+      const changesOpenClubForm =
+        (payload.isActive === false && customForm.isActive) ||
+        (payload.featureId !== undefined && payload.featureId !== customForm.featureId) ||
+        (payload.featureType !== undefined && payload.featureType !== customForm.featureType)
+
+      if (changesOpenClubForm && (await this.isAttachedToOpenClub(customForm))) {
+        return response.badRequest({ message: 'CLOSE_REGISTRATION_BEFORE_FORM_CHANGE' })
+      }
+
       await customForm.merge(payload).save()
 
       return response.ok({
@@ -138,6 +154,10 @@ export default class CustomFormsController {
         return response.notFound({
           message: 'CUSTOM_FORM_NOT_FOUND',
         })
+      }
+
+      if (await this.isAttachedToOpenClub(customForm)) {
+        return response.badRequest({ message: 'CLOSE_REGISTRATION_BEFORE_FORM_CHANGE' })
       }
 
       await customForm.delete()
@@ -197,6 +217,10 @@ export default class CustomFormsController {
         return response.notFound({
           message: 'CUSTOM_FORM_NOT_FOUND',
         })
+      }
+
+      if (customForm.isActive && (await this.isAttachedToOpenClub(customForm))) {
+        return response.badRequest({ message: 'CLOSE_REGISTRATION_BEFORE_FORM_CHANGE' })
       }
 
       customForm.isActive = !customForm.isActive
@@ -294,6 +318,10 @@ export default class CustomFormsController {
         return response.notFound({
           message: 'CUSTOM_FORM_NOT_FOUND',
         })
+      }
+
+      if (await this.isAttachedToOpenClub(customForm)) {
+        return response.badRequest({ message: 'CLOSE_REGISTRATION_BEFORE_FORM_CHANGE' })
       }
 
       // Detach the form from any feature by setting featureId to null
