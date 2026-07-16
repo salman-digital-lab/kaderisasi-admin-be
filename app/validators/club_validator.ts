@@ -18,11 +18,11 @@ export const clubValidator = vine.compile(
         ),
       })
       .optional(),
-    start_period: vine.date().optional(),
-    end_period: vine.date().optional(),
+    start_period: vine.date().nullable().optional(),
+    end_period: vine.date().nullable().optional(),
     is_show: vine.boolean().optional(),
     is_registration_open: vine.boolean().optional(),
-    registration_end_date: vine.date().optional(),
+    registration_end_date: vine.date().nullable().optional(),
   })
 )
 
@@ -44,11 +44,11 @@ export const updateClubValidator = vine.compile(
         ),
       })
       .optional(),
-    start_period: vine.date().optional(),
-    end_period: vine.date().optional(),
+    start_period: vine.date().nullable().optional(),
+    end_period: vine.date().nullable().optional(),
     is_show: vine.boolean().optional(),
     is_registration_open: vine.boolean().optional(),
-    registration_end_date: vine.date().optional(),
+    registration_end_date: vine.date().nullable().optional(),
   })
 )
 
@@ -76,5 +76,11 @@ export const youtubeMediaValidator = vine.compile(
     media_url: vine.string().url(),
     media_type: vine.literal('video'),
     video_source: vine.literal('youtube'),
+  })
+)
+
+export const deleteClubMediaValidator = vine.compile(
+  vine.object({
+    media_url: vine.string().trim().minLength(1),
   })
 )

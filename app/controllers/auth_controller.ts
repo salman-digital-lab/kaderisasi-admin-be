@@ -1,45 +1,11 @@
 import { HttpContext } from '@adonisjs/core/http'
 import hash from '@adonisjs/core/services/hash'
 
-import {
-  registerValidator,
-  loginValidator,
-  editPublicUserValidator,
-} from '#validators/auth_validator'
+import { loginValidator, editPublicUserValidator } from '#validators/auth_validator'
 import AdminUser from '#models/admin_user'
 import PublicUser from '#models/public_user'
 
 export default class AuthController {
-  async register({ request, response }: HttpContext) {
-    const payload = await registerValidator.validate(request.all())
-    try {
-      const exist = await AdminUser.findBy('email', payload.email)
-
-      if (exist) {
-        return response.conflict({
-          message: 'EMAIL_ALREADY_REGISTERED',
-        })
-      }
-
-      const user = await AdminUser.create({
-        displayName: payload.displayName,
-        email: payload.email,
-        password: payload.password,
-        isActive: true,
-      })
-
-      return response.ok({
-        message: 'REGISTER_SUCCESS',
-        data: user,
-      })
-    } catch (error) {
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: error.message,
-      })
-    }
-  }
-
   async login({ request, response, auth }: HttpContext) {
     const payload = await loginValidator.validate(request.all())
     try {

@@ -3,6 +3,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
 import Club from '#models/club'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
+import { getExpiredClubPeriodCutoff } from '#services/club_schedule_service'
 
 export default class UpdateClubVisibility extends BaseCommand {
   static commandName = 'clubs:update-visibility'
@@ -15,14 +16,14 @@ export default class UpdateClubVisibility extends BaseCommand {
   async run() {
     try {
       const currentDate = DateTime.local()
-      const endOfCurrentMonth = currentDate.endOf('month')
+      const expiredPeriodCutoff = getExpiredClubPeriodCutoff(currentDate)
 
       // Find clubs that are currently shown but their period has ended
-      // The period is considered ended if the current date is past the end of the month specified in end_period
+      // An end period represents a whole month, so the Club remains visible throughout that month.
       const expiredClubs = await Club.query()
         .where('is_show', true)
         .whereNotNull('end_period')
-        .where('end_period', '<', endOfCurrentMonth.toSQLDate())
+        .where('end_period', '<', expiredPeriodCutoff)
         .update({ is_show: false }, ['id', 'name', 'end_period'])
 
       logger.info('Completed: Updated club visibility')
@@ -36,7 +37,9 @@ export default class UpdateClubVisibility extends BaseCommand {
         logger.info('No clubs found with expired periods')
       }
     } catch (error) {
-      logger.error(`Error updating club visibility: ${error.message}`)
+      const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR'
+      logger.error(`Error updating club visibility: ${message}`)
+      throw error
     }
   }
 }

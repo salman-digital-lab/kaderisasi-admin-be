@@ -16,13 +16,15 @@ export const updateClubRegistrationValidator = vine.compile(
 
 export const bulkUpdateClubRegistrationsValidator = vine.compile(
   vine.object({
-    registrations: vine.array(
-      vine.object({
-        id: vine.number().positive(),
-        status: vine.enum(['PENDING', 'APPROVED', 'REJECTED']),
-        additional_data: vine.record(vine.any()).optional(),
-      })
-    ),
+    registrations: vine
+      .array(
+        vine.object({
+          id: vine.number().positive(),
+          status: vine.enum(['PENDING', 'APPROVED', 'REJECTED']),
+          additional_data: vine.record(vine.any()).optional(),
+        })
+      )
+      .minLength(1),
   })
 )
 

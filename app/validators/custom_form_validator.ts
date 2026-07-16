@@ -16,7 +16,7 @@ export const customFormValidator = vine.compile(
     featureType: vine
       .enum(['activity_registration', 'club_registration', 'independent_form'])
       .optional(),
-    featureId: vine.number().positive().nullable().optional(),
+    featureId: vine.number().withoutDecimals().positive().nullable().optional(),
     formSchema: vine
       .object({
         fields: vine.array(
@@ -71,7 +71,7 @@ export const updateCustomFormValidator = vine.compile(
     featureType: vine
       .enum(['activity_registration', 'club_registration', 'independent_form'])
       .optional(),
-    featureId: vine.number().positive().nullable().optional(),
+    featureId: vine.number().withoutDecimals().positive().nullable().optional(),
     formSchema: vine
       .object({
         fields: vine.array(
@@ -115,5 +115,11 @@ export const updateCustomFormValidator = vine.compile(
       })
       .optional(),
     isActive: vine.boolean().optional(),
+  })
+)
+
+export const attachCustomFormToClubValidator = vine.compile(
+  vine.object({
+    clubId: vine.number().withoutDecimals().positive(),
   })
 )

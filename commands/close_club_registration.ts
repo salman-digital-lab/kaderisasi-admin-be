@@ -37,7 +37,9 @@ export default class CloseClubRegistration extends BaseCommand {
         logger.info('No clubs found with expired registration periods')
       }
     } catch (error) {
-      logger.error(`Error closing club registrations: ${error.message}`)
+      const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR'
+      logger.error(`Error closing club registrations: ${message}`)
+      throw error
     }
   }
 }

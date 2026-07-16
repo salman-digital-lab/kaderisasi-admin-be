@@ -1,4 +1,5 @@
 import { HttpContext } from '@adonisjs/core/http'
+import db from '@adonisjs/lucid/services/db'
 import ClubRegistration from '#models/club_registration'
 import Club from '#models/club'
 import PublicUser from '#models/public_user'
@@ -9,6 +10,10 @@ import {
 } from '#validators/club_registration_validator'
 import { USER_LEVEL_ENUM } from '../../types/constants/profile.js'
 import ExcelJS from 'exceljs'
+import {
+  buildClubRegistrationQuestionColumns,
+  formatClubRegistrationAnswer,
+} from '#services/club_registration_export_service'
 
 export default class ClubRegistrationsController {
   // Convert the numeric profile level into a human-readable kaderisasi level label
@@ -230,33 +235,49 @@ export default class ClubRegistrationsController {
     try {
       const payload = await bulkUpdateClubRegistrationsValidator.validate(request.all())
 
-      // Get all registration IDs from payload
       const registrationIds = payload.registrations.map((r) => r.id)
+      const uniqueRegistrationIds = [...new Set(registrationIds)]
 
-      // Fetch all registrations in one query
-      const registrations = await ClubRegistration.query()
-        .whereIn('id', registrationIds)
-        .preload('member')
-        .preload('club')
+      if (uniqueRegistrationIds.length !== registrationIds.length) {
+        return response.badRequest({ message: 'DUPLICATE_REGISTRATION_IDS' })
+      }
 
-      // Create a Map for O(1) lookups by ID
-      const registrationMap = new Map(registrations.map((r) => [r.id, r]))
+      let missingRegistrationIds: number[] = []
+      let updatedRegistrations: ClubRegistration[] = []
 
-      const updatedRegistrations = []
+      await db.transaction(async (trx) => {
+        const registrations = await ClubRegistration.query({ client: trx })
+          .whereIn('id', uniqueRegistrationIds)
+          .preload('member')
+          .preload('club')
+          .forUpdate()
+        const registrationMap = new Map(
+          registrations.map((registration) => [registration.id, registration])
+        )
 
-      // Update each registration
-      for (const registrationData of payload.registrations) {
-        const registration = registrationMap.get(registrationData.id)
-        if (!registration) {
-          continue // Skip if not found
+        missingRegistrationIds = uniqueRegistrationIds.filter((id) => !registrationMap.has(id))
+        if (missingRegistrationIds.length > 0) {
+          return
         }
 
-        registration.status = registrationData.status
-        if (registrationData.additional_data) {
-          registration.additionalData = registrationData.additional_data
+        for (const registrationData of payload.registrations) {
+          const registration = registrationMap.get(registrationData.id)!
+          registration.useTransaction(trx)
+          registration.status = registrationData.status
+          if (registrationData.additional_data) {
+            registration.additionalData = registrationData.additional_data
+          }
+          await registration.save()
         }
-        await registration.save()
-        updatedRegistrations.push(registration)
+
+        updatedRegistrations = registrationIds.map((id) => registrationMap.get(id)!)
+      })
+
+      if (missingRegistrationIds.length > 0) {
+        return response.notFound({
+          message: 'REGISTRATIONS_NOT_FOUND',
+          ids: missingRegistrationIds,
+        })
       }
 
       return response.ok({
@@ -316,6 +337,8 @@ export default class ClubRegistrationsController {
         .where('feature_type', 'club_registration')
         .where('feature_id', clubId)
         .where('is_active', true)
+        .orderBy('updated_at', 'desc')
+        .orderBy('id', 'desc')
         .first()
 
       // Define base headers
@@ -334,32 +357,17 @@ export default class ClubRegistrationsController {
         'Tanggal Pendaftaran',
       ]
 
-      let questionHeaders: string[] = []
-      let questionKeys: string[] = []
-
-      if (customForm) {
-        // Use custom form schema
-        const formSchema = customForm.formSchema
-
-        // Extract all fields from all sections, excluding the profile_data section
-        for (const section of formSchema.fields) {
-          if (section.section_name === 'profile_data') {
-            continue
-          }
-
-          for (const field of section.fields) {
-            questionHeaders.push(field.label)
-            questionKeys.push(field.key)
-          }
-        }
-      }
+      const questionColumns = buildClubRegistrationQuestionColumns(
+        customForm?.formSchema,
+        registrations.map((registration) => registration.additionalData)
+      )
 
       // Create workbook and worksheet
       const workbook = new ExcelJS.Workbook()
       const worksheet = workbook.addWorksheet('Registrations')
 
       // Add headers
-      const allHeaders = [...baseHeaders, ...questionHeaders]
+      const allHeaders = [...baseHeaders, ...questionColumns.map((column) => column.label)]
       worksheet.addRow(allHeaders)
 
       // Style the header row
@@ -390,9 +398,10 @@ export default class ClubRegistrationsController {
           registration.createdAt.toFormat('yyyy-MM-dd HH:mm:ss'),
         ]
 
-        // Add questionnaire answers if custom form exists
         const answers = registration.additionalData || {}
-        const answerValues = questionKeys.map((key) => answers[key] || '')
+        const answerValues = questionColumns.map((column) =>
+          formatClubRegistrationAnswer(answers[column.key])
+        )
 
         // Add row to worksheet
         worksheet.addRow([...baseData, ...answerValues])

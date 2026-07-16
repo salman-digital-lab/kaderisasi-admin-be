@@ -26,7 +26,6 @@ router
   .group(() => {
     router
       .group(() => {
-        router.post('register', [AuthController, 'register'])
         router.post('login', [AuthController, 'login'])
         router.put('logout', [AuthController, 'logout']).use(middleware.auth())
       })
@@ -42,6 +41,7 @@ router
       })
       .prefix('admin-users')
       .use(middleware.auth())
+      .use(middleware.adminPermission({ permission: 'akunadmin' }))
 
     router
       .group(() => {
@@ -191,6 +191,7 @@ router
       })
       .prefix('clubs')
       .use(middleware.auth())
+      .use(middleware.adminPermission({ permission: 'club' }))
 
     router
       .group(() => {
@@ -203,6 +204,7 @@ router
       })
       .prefix('club-registrations')
       .use(middleware.auth())
+      .use(middleware.adminPermission({ permission: 'club' }))
 
     router
       .group(() => {
@@ -223,6 +225,7 @@ router
       })
       .prefix('custom-forms')
       .use(middleware.auth())
+      .use(middleware.adminPermission({ permission: 'formkustom' }))
 
     router
       .group(() => {
