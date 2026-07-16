@@ -12,6 +12,7 @@ export const activityValidator = vine.compile(
     selection_end: vine.date().optional(),
     minimum_level: vine.number().withoutDecimals().positive().optional(),
     activity_type: vine.number().withoutDecimals().positive().optional(),
+    certificate_template_id: vine.number().withoutDecimals().positive().nullable().optional(),
     club_id: vine.number().withoutDecimals().positive().nullable().optional(),
     additional_config: vine
       .object({
@@ -26,7 +27,7 @@ export const activityValidator = vine.compile(
             visible_at: vine.string().optional(),
           })
           .optional(),
-        certificate_template_id: vine.number().optional(),
+        certificate_template_id: vine.number().withoutDecimals().positive().nullable().optional(),
         allow_guest_registration: vine.boolean().optional(),
       })
       .optional(),
@@ -49,6 +50,7 @@ export const updateActivityValidator = vine.compile(
     selection_end: vine.date().optional(),
     minimum_level: vine.number().withoutDecimals().positive().optional(),
     activity_type: vine.number().withoutDecimals().positive().optional(),
+    certificate_template_id: vine.number().withoutDecimals().positive().nullable().optional(),
     club_id: vine.number().withoutDecimals().positive().nullable().optional(),
     additional_config: vine
       .object({
@@ -63,7 +65,7 @@ export const updateActivityValidator = vine.compile(
             visible_at: vine.string().optional(),
           })
           .optional(),
-        certificate_template_id: vine.number().optional(),
+        certificate_template_id: vine.number().withoutDecimals().positive().nullable().optional(),
         allow_guest_registration: vine.boolean().optional(),
       })
       .optional(),

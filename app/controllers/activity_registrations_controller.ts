@@ -21,6 +21,7 @@ import ExcelJS from 'exceljs'
 import Province from '#models/province'
 import City from '#models/city'
 import University from '#models/university'
+import IssuedCertificate from '#models/issued_certificate'
 
 type ExportEducationEntry = {
   degree?: string
@@ -966,6 +967,12 @@ export default class ActivityRegistrationsController {
       if (!registration) {
         return response.ok({
           message: 'REGISTRATION_NOT_FOUND',
+        })
+      }
+      const issuedCertificate = await IssuedCertificate.findBy('registrationId', registration.id)
+      if (issuedCertificate) {
+        return response.conflict({
+          message: 'CERTIFICATE_REGISTRATION_HAS_ISSUED_CERTIFICATE',
         })
       }
       await ActivityRegistration.query().where('id', id).delete()

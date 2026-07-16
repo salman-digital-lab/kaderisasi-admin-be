@@ -1,5 +1,5 @@
-import { HttpContext } from '@adonisjs/core/http'
-import vine from '@vinejs/vine'
+import type { HttpContext } from '@adonisjs/core/http'
+import vine, { errors } from '@vinejs/vine'
 import {
   buildCertificateData,
   buildBulkCertificateData,
@@ -9,115 +9,133 @@ import {
   issueSingleCertificate,
   listIssuedCertificates,
   revokeIssuedCertificate,
+  type CertificateErrorType,
 } from '#services/certificate_service'
 
 const generateCertificatesValidator = vine.compile(
   vine.object({
-    activity_id: vine.number().positive(),
-    status: vine.string().optional(),
+    activity_id: vine.number().withoutDecimals().positive(),
+    status: vine.string().trim().maxLength(50).optional(),
   })
 )
 
-const generateSingleCertificateValidator = vine.compile(
+const registrationCertificateValidator = vine.compile(
   vine.object({
-    registration_id: vine.number().positive(),
+    registration_id: vine.number().withoutDecimals().positive(),
   })
 )
 
 const issueBulkCertificateValidator = vine.compile(
   vine.object({
-    registration_ids: vine.array(vine.number().positive()).minLength(1),
+    registration_ids: vine
+      .array(vine.number().withoutDecimals().positive())
+      .minLength(1)
+      .maxLength(100),
   })
 )
 
 const revokeCertificateValidator = vine.compile(
   vine.object({
-    reason: vine.string().trim().nullable().optional(),
+    reason: vine.string().trim().minLength(3).maxLength(1000),
   })
 )
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'UNKNOWN_ERROR'
+function parsePositiveId(value: string): number | null {
+  if (!/^[1-9][0-9]*$/.test(value)) {
+    return null
+  }
+
+  const id = Number(value)
+  return Number.isSafeInteger(id) ? id : null
+}
+
+function validationError(response: HttpContext['response'], error: { messages: unknown }) {
+  return response.status(422).json({
+    message: 'VALIDATION_ERROR',
+    errors: error.messages,
+  })
+}
+
+function domainError(
+  response: HttpContext['response'],
+  error: CertificateErrorType,
+  details?: string[]
+) {
+  if (
+    error === 'REGISTRATION_NOT_FOUND' ||
+    error === 'ACTIVITY_NOT_FOUND' ||
+    error === 'CERTIFICATE_TEMPLATE_NOT_FOUND' ||
+    error === 'CERTIFICATE_NOT_FOUND'
+  ) {
+    return response.notFound({ message: error })
+  }
+
+  if (error === 'REGISTRATION_NOT_ELIGIBLE' || error === 'CERTIFICATE_ALREADY_REVOKED') {
+    return response.conflict({ message: error })
+  }
+
+  if (
+    error === 'NO_CERTIFICATE_TEMPLATE' ||
+    error === 'CERTIFICATE_TEMPLATE_NOT_PUBLISHED' ||
+    error === 'CERTIFICATE_TEMPLATE_NOT_READY'
+  ) {
+    return response.status(422).json({ message: error, errors: details })
+  }
+
+  return response.badRequest({ message: error })
 }
 
 export default class CertificatesController {
   async index({ request, response }: HttpContext) {
     try {
-      const activityId = request.qs().activity_id ? Number(request.qs().activity_id) : undefined
-
-      if (activityId !== undefined && (Number.isNaN(activityId) || activityId <= 0)) {
+      const rawActivityId = request.qs().activity_id
+      const activityId = rawActivityId === undefined ? undefined : Number(rawActivityId)
+      if (activityId !== undefined && (!Number.isSafeInteger(activityId) || activityId <= 0)) {
         return response.badRequest({ message: 'INVALID_ACTIVITY_ID' })
       }
 
-      const certificates = await listIssuedCertificates(activityId)
+      const page = Math.max(Number(request.qs().page) || 1, 1)
+      const perPage = Math.min(Math.max(Number(request.qs().per_page) || 20, 1), 100)
+      const certificates = await listIssuedCertificates({ activityId, page, perPage })
 
-      return response.ok({
-        message: 'GET_DATA_SUCCESS',
-        data: certificates,
-      })
-    } catch (error) {
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+      return response.ok({ message: 'GET_DATA_SUCCESS', data: certificates })
+    } catch {
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
   async show({ params, response }: HttpContext) {
     try {
-      const id = Number.parseInt(params.id, 10)
-
-      if (Number.isNaN(id) || id <= 0) {
+      const id = parsePositiveId(params.id)
+      if (!id) {
         return response.badRequest({ message: 'INVALID_CERTIFICATE_ID' })
       }
 
       const result = await getIssuedCertificateById(id)
-
-      if (!result.success) {
-        return response.notFound({ message: result.error })
-      }
-
-      return response.ok({
-        message: 'GET_DATA_SUCCESS',
-        data: result.data,
-      })
-    } catch (error) {
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+      return result.success
+        ? response.ok({ message: 'GET_DATA_SUCCESS', data: result.data })
+        : domainError(response, result.error, result.details)
+    } catch {
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
   async showByCode({ params, response }: HttpContext) {
     try {
       const result = await getIssuedCertificateByCode(params.code)
-
-      if (!result.success) {
-        return response.notFound({ message: result.error })
-      }
-
-      return response.ok({
-        message: 'GET_DATA_SUCCESS',
-        data: result.data,
-      })
-    } catch (error) {
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+      return result.success
+        ? response.ok({ message: 'GET_DATA_SUCCESS', data: result.data })
+        : domainError(response, result.error, result.details)
+    } catch {
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
   async verify({ params, response }: HttpContext) {
     try {
       const result = await getIssuedCertificateByCode(params.code)
-
       if (!result.success) {
-        return response.notFound({
-          message: result.error,
-          data: { valid: false },
-        })
+        return response.notFound({ message: result.error, data: { valid: false } })
       }
 
       return response.ok({
@@ -129,30 +147,22 @@ export default class CertificatesController {
           activity: result.data.activity,
         },
       })
-    } catch (error) {
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+    } catch {
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
-  async issueSingle({ request, response, auth }: HttpContext) {
+  async issueSingle({ request, response, auth, requestId }: HttpContext) {
     try {
-      const payload = await request.validateUsing(generateSingleCertificateValidator)
-      const result = await issueSingleCertificate(payload.registration_id, auth.user?.id ?? null)
+      const payload = await request.validateUsing(registrationCertificateValidator)
+      const result = await issueSingleCertificate(
+        payload.registration_id,
+        auth.user?.id ?? null,
+        requestId
+      )
 
       if (!result.success) {
-        const httpStatus =
-          result.error === 'REGISTRATION_NOT_FOUND' ||
-          result.error === 'ACTIVITY_NOT_FOUND' ||
-          result.error === 'CERTIFICATE_TEMPLATE_NOT_FOUND'
-            ? 404
-            : 400
-        if (httpStatus === 404) {
-          return response.notFound({ message: result.error })
-        }
-        return response.badRequest({ message: result.error })
+        return domainError(response, result.error, result.details)
       }
 
       return response.status(result.created ? 201 : 200).json({
@@ -160,155 +170,93 @@ export default class CertificatesController {
         data: result.data,
       })
     } catch (error) {
-      if (error instanceof Error && error.name === 'ValidationException') {
-        return response.badRequest({
-          message: 'VALIDATION_ERROR',
-          errors: 'messages' in error ? error.messages : undefined,
-        })
+      if (error instanceof errors.E_VALIDATION_ERROR) {
+        return validationError(response, error)
       }
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
-  async issueBulk({ request, response, auth }: HttpContext) {
+  async issueBulk({ request, response, auth, requestId }: HttpContext) {
     try {
       const payload = await request.validateUsing(issueBulkCertificateValidator)
-      const result = await issueBulkCertificates(payload.registration_ids, auth.user?.id ?? null)
+      const result = await issueBulkCertificates(
+        payload.registration_ids,
+        auth.user?.id ?? null,
+        requestId
+      )
 
-      return response.ok({
-        message: 'CERTIFICATES_ISSUED',
-        data: {
-          issued: result.issued,
-          skipped: result.skipped,
-          total_issued: result.issued.length,
-          total_skipped: result.skipped.length,
-        },
-      })
+      return response.ok({ message: 'CERTIFICATES_ISSUED', data: result })
     } catch (error) {
-      if (error instanceof Error && error.name === 'ValidationException') {
-        return response.badRequest({
-          message: 'VALIDATION_ERROR',
-          errors: 'messages' in error ? error.messages : undefined,
-        })
+      if (error instanceof errors.E_VALIDATION_ERROR) {
+        return validationError(response, error)
       }
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
-  async revoke({ params, request, response }: HttpContext) {
+  async revoke({ params, request, response, auth, requestId }: HttpContext) {
     try {
-      const id = Number.parseInt(params.id, 10)
-
-      if (Number.isNaN(id) || id <= 0) {
+      const id = parsePositiveId(params.id)
+      if (!id) {
         return response.badRequest({ message: 'INVALID_CERTIFICATE_ID' })
       }
 
       const payload = await request.validateUsing(revokeCertificateValidator)
-      const result = await revokeIssuedCertificate(id, payload.reason ?? null)
-
-      if (!result.success) {
-        return response.notFound({ message: result.error })
+      const actorId = auth.user?.id
+      if (!actorId) {
+        return response.unauthorized({ message: 'UNAUTHORIZED' })
       }
 
-      return response.ok({
-        message: 'CERTIFICATE_REVOKED',
-        data: result.data,
-      })
+      const result = await revokeIssuedCertificate(id, payload.reason, actorId, requestId)
+      return result.success
+        ? response.ok({ message: 'CERTIFICATE_REVOKED', data: result.data })
+        : domainError(response, result.error, result.details)
     } catch (error) {
-      if (error instanceof Error && error.name === 'ValidationException') {
-        return response.badRequest({
-          message: 'VALIDATION_ERROR',
-          errors: 'messages' in error ? error.messages : undefined,
-        })
+      if (error instanceof errors.E_VALIDATION_ERROR) {
+        return validationError(response, error)
       }
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
   async generate({ request, response }: HttpContext) {
     try {
       const payload = await request.validateUsing(generateCertificatesValidator)
-      const status = payload.status || 'LULUS KEGIATAN'
-
-      const result = await buildBulkCertificateData(payload.activity_id, status)
+      const result = await buildBulkCertificateData(
+        payload.activity_id,
+        payload.status || 'LULUS KEGIATAN'
+      )
 
       if (!result.success) {
-        const httpStatus =
-          result.error === 'ACTIVITY_NOT_FOUND' || result.error === 'CERTIFICATE_TEMPLATE_NOT_FOUND'
-            ? 404
-            : 400
-        if (httpStatus === 404) {
-          return response.notFound({ message: result.error })
-        }
-        return response.badRequest({ message: result.error })
+        return domainError(response, result.error, result.details)
       }
 
       return response.ok({
         message: 'CERTIFICATE_DATA_GENERATED',
-        data: {
-          activity: result.data.activity,
-          template: result.data.template,
-          participants: result.data.participants,
-          total: result.data.participants.length,
-        },
+        data: { ...result.data, total: result.data.participants.length },
       })
     } catch (error) {
-      if (error instanceof Error && error.name === 'ValidationException') {
-        return response.badRequest({
-          message: 'VALIDATION_ERROR',
-          errors: 'messages' in error ? error.messages : undefined,
-        })
+      if (error instanceof errors.E_VALIDATION_ERROR) {
+        return validationError(response, error)
       }
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
   async generateSingle({ request, response }: HttpContext) {
     try {
-      const payload = await request.validateUsing(generateSingleCertificateValidator)
-
+      const payload = await request.validateUsing(registrationCertificateValidator)
       const result = await buildCertificateData(payload.registration_id)
 
-      if (!result.success) {
-        const httpStatus =
-          result.error === 'REGISTRATION_NOT_FOUND' ||
-          result.error === 'ACTIVITY_NOT_FOUND' ||
-          result.error === 'CERTIFICATE_TEMPLATE_NOT_FOUND'
-            ? 404
-            : 400
-        if (httpStatus === 404) {
-          return response.notFound({ message: result.error })
-        }
-        return response.badRequest({ message: result.error })
-      }
-
-      return response.ok({
-        message: 'CERTIFICATE_DATA_GENERATED',
-        data: result.data,
-      })
+      return result.success
+        ? response.ok({ message: 'CERTIFICATE_DATA_GENERATED', data: result.data })
+        : domainError(response, result.error, result.details)
     } catch (error) {
-      if (error instanceof Error && error.name === 'ValidationException') {
-        return response.badRequest({
-          message: 'VALIDATION_ERROR',
-          errors: 'messages' in error ? error.messages : undefined,
-        })
+      if (error instanceof errors.E_VALIDATION_ERROR) {
+        return validationError(response, error)
       }
-      return response.internalServerError({
-        message: 'GENERAL_ERROR',
-        error: getErrorMessage(error),
-      })
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 }

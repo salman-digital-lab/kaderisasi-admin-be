@@ -226,27 +226,66 @@ router
 
     router
       .group(() => {
-        router.get('', [CertificateTemplatesController, 'index'])
-        router.get(':id', [CertificateTemplatesController, 'show'])
-        router.post('', [CertificateTemplatesController, 'store'])
-        router.put(':id', [CertificateTemplatesController, 'update'])
-        router.delete(':id', [CertificateTemplatesController, 'destroy'])
-        router.post(':id/background', [CertificateTemplatesController, 'uploadBackground'])
+        router
+          .get('', [CertificateTemplatesController, 'index'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.read' }))
+        router
+          .get(':id', [CertificateTemplatesController, 'show'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.read' }))
+        router
+          .post('', [CertificateTemplatesController, 'store'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+        router
+          .put(':id', [CertificateTemplatesController, 'update'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+        router
+          .post(':id/publish', [CertificateTemplatesController, 'publish'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+        router
+          .post(':id/archive', [CertificateTemplatesController, 'archive'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+        router
+          .delete(':id', [CertificateTemplatesController, 'destroy'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+        router
+          .post(':id/background', [CertificateTemplatesController, 'uploadBackground'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+        router
+          .post(':id/assets', [CertificateTemplatesController, 'uploadAsset'])
+          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
       })
       .prefix('certificate-templates')
       .use(middleware.auth())
 
     router
       .group(() => {
-        router.get('', [CertificatesController, 'index'])
-        router.get('/code/:code', [CertificatesController, 'showByCode'])
-        router.get('/verify/:code', [CertificatesController, 'verify'])
-        router.post('/issue-single', [CertificatesController, 'issueSingle'])
-        router.post('/issue-bulk', [CertificatesController, 'issueBulk'])
-        router.post('/generate', [CertificatesController, 'generate'])
-        router.post('/generate-single', [CertificatesController, 'generateSingle'])
-        router.get('/:id', [CertificatesController, 'show'])
-        router.post('/:id/revoke', [CertificatesController, 'revoke'])
+        router
+          .get('', [CertificatesController, 'index'])
+          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+        router
+          .get('/code/:code', [CertificatesController, 'showByCode'])
+          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+        router
+          .get('/verify/:code', [CertificatesController, 'verify'])
+          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+        router
+          .post('/issue-single', [CertificatesController, 'issueSingle'])
+          .use(middleware.certificatePermission({ permission: 'certificate.issue' }))
+        router
+          .post('/issue-bulk', [CertificatesController, 'issueBulk'])
+          .use(middleware.certificatePermission({ permission: 'certificate.issue' }))
+        router
+          .post('/generate', [CertificatesController, 'generate'])
+          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+        router
+          .post('/generate-single', [CertificatesController, 'generateSingle'])
+          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+        router
+          .get('/:id', [CertificatesController, 'show'])
+          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+        router
+          .post('/:id/revoke', [CertificatesController, 'revoke'])
+          .use(middleware.certificatePermission({ permission: 'certificate.revoke' }))
       })
       .prefix('certificates')
       .use(middleware.auth())

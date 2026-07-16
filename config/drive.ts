@@ -23,15 +23,15 @@ const driveConfig = defineConfig({
     }),
     r2: services.s3({
       credentials: {
-        accessKeyId: 'DRIVE_ACCESS_KEY_ID',
-        secretAccessKey: 'DRIVE_SECRET_ACCESS_KEY',
+        accessKeyId: env.get('DRIVE_ACCESS_KEY_ID'),
+        secretAccessKey: env.get('DRIVE_SECRET_ACCESS_KEY'),
       },
 
-      endpoint: 'https://jg21.r2.cloudflarestorage.com',
-      region: 'auto',
+      endpoint: env.get('DRIVE_ENDPOINT'),
+      region: env.get('DRIVE_REGION'),
       supportsACL: false,
 
-      bucket: 'DRIVE_BUCKET',
+      bucket: env.get('DRIVE_BUCKET'),
       visibility: 'private',
     }),
   },

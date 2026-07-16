@@ -1,7 +1,10 @@
 import { HttpContext } from '@adonisjs/core/http'
 import drive from '@adonisjs/drive/services/main'
 
-import Activity from '#models/activity'
+import Activity, { type AdditionalConfig } from '#models/activity'
+import CertificateTemplate from '#models/certificate_template'
+import { hasCertificatePermission } from '#middleware/certificate_permission_middleware'
+import { getCertificateTemplateReadiness } from '#services/certificate_template_readiness_service'
 import { generateUniqueActivitySlug } from '#services/activity_slug_service'
 import {
   activityValidator,
@@ -185,10 +188,43 @@ export default class ActivitiesController {
     }
   }
 
-  async store({ request, response }: HttpContext) {
+  async store({ request, response, auth }: HttpContext) {
     const payload = await activityValidator.validate(request.all())
     try {
+      const certificateTemplateId =
+        payload.certificate_template_id ??
+        payload.additional_config?.certificate_template_id ??
+        null
+
+      if (certificateTemplateId !== null) {
+        if (
+          !auth.user ||
+          !hasCertificatePermission(auth.user.role, 'certificate.template.manage')
+        ) {
+          return response.forbidden({ message: 'FORBIDDEN' })
+        }
+
+        const template = await CertificateTemplate.find(certificateTemplateId)
+        if (!template) {
+          return response.status(422).json({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
+        }
+
+        const readiness = getCertificateTemplateReadiness(template)
+        if (template.lifecycleStatus !== 'published' || !readiness.ready) {
+          return response.status(422).json({
+            message: 'CERTIFICATE_TEMPLATE_NOT_READY',
+            errors: readiness.errors,
+          })
+        }
+      }
+
       const slug = await generateUniqueActivitySlug(payload.name)
+      const additionalConfig = payload.additional_config
+        ? ({
+            ...payload.additional_config,
+            certificate_template_id: certificateTemplateId,
+          } as AdditionalConfig)
+        : undefined
 
       const activityData = await Activity.create({
         ...payload,
@@ -210,6 +246,8 @@ export default class ActivitiesController {
           ? DateTime.fromJSDate(payload.selection_end)
           : undefined,
         clubId: payload.club_id ?? null,
+        additionalConfig,
+        certificateTemplateId,
       })
 
       return response.ok({
@@ -224,22 +262,50 @@ export default class ActivitiesController {
     }
   }
 
-  async update({ params, request, response }: HttpContext) {
+  async update({ params, request, response, auth }: HttpContext) {
     const payload = await updateActivityValidator.validate(request.all())
     try {
       const id: number = params.id
       const activityData = await Activity.findOrFail(id)
-      const { slug: _slug, ...payloadWithoutSlug } = payload as typeof payload & { slug?: string }
-      if (payload.additional_config) {
-        var newConfig: any = {
-          ...activityData.additionalConfig,
-          ...payload.additional_config,
+      const nestedTemplateId = payload.additional_config?.certificate_template_id
+      const assignmentProvided =
+        payload.certificate_template_id !== undefined || nestedTemplateId !== undefined
+      const requestedTemplateId =
+        payload.certificate_template_id !== undefined
+          ? payload.certificate_template_id
+          : nestedTemplateId
+
+      if (assignmentProvided && requestedTemplateId !== activityData.certificateTemplateId) {
+        if (
+          !auth.user ||
+          !hasCertificatePermission(auth.user.role, 'certificate.template.manage')
+        ) {
+          return response.forbidden({ message: 'FORBIDDEN' })
         }
-        if (activityData.additionalConfig.images) {
-          newConfig.images = activityData.additionalConfig.images
+
+        if (requestedTemplateId !== null && requestedTemplateId !== undefined) {
+          const template = await CertificateTemplate.find(requestedTemplateId)
+          if (!template) {
+            return response.status(422).json({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
+          }
+
+          const readiness = getCertificateTemplateReadiness(template)
+          if (template.lifecycleStatus !== 'published' || !readiness.ready) {
+            return response.status(422).json({
+              message: 'CERTIFICATE_TEMPLATE_NOT_READY',
+              errors: readiness.errors,
+            })
+          }
         }
       }
-      payloadWithoutSlug.additional_config = newConfig
+
+      const { slug: _slug, ...payloadWithoutSlug } = payload as typeof payload & { slug?: string }
+      const newConfig: AdditionalConfig = {
+        ...activityData.additionalConfig,
+        ...(payload.additional_config ?? {}),
+        ...(assignmentProvided ? { certificate_template_id: requestedTemplateId ?? null } : {}),
+        images: activityData.additionalConfig.images ?? [],
+      }
       const updated = await activityData
         .merge({
           ...payloadWithoutSlug,
@@ -264,6 +330,8 @@ export default class ActivitiesController {
           ...(payloadWithoutSlug.club_id !== undefined
             ? { clubId: payloadWithoutSlug.club_id }
             : {}),
+          additionalConfig: newConfig,
+          ...(assignmentProvided ? { certificateTemplateId: requestedTemplateId ?? null } : {}),
         })
         .save()
 

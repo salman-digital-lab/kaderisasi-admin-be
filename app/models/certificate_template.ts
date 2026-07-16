@@ -1,7 +1,9 @@
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 
-type TemplateData = {
+export type CertificateTemplateLifecycle = 'draft' | 'published' | 'archived'
+
+export type TemplateData = {
   backgroundUrl: string | null
   elements: Array<{
     id: string
@@ -53,6 +55,21 @@ export default class CertificateTemplate extends BaseModel {
 
   @column()
   declare isActive: boolean
+
+  @column()
+  declare lifecycleStatus: CertificateTemplateLifecycle
+
+  @column()
+  declare version: number
+
+  @column()
+  declare backgroundAssetVersion: number
+
+  @column.dateTime()
+  declare publishedAt: DateTime | null
+
+  @column.dateTime()
+  declare archivedAt: DateTime | null
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

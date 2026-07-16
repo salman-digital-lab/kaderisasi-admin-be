@@ -1,8 +1,16 @@
+import { DateTime } from 'luxon'
+import logger from '@adonisjs/core/services/logger'
+import db from '@adonisjs/lucid/services/db'
+import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import Activity from '#models/activity'
 import ActivityRegistration from '#models/activity_registration'
 import CertificateTemplate from '#models/certificate_template'
 import IssuedCertificate from '#models/issued_certificate'
-import { DateTime } from 'luxon'
+import University from '#models/university'
+import { generateCertificateCode } from '#services/certificate_code_service'
+import { getCertificateTemplateReadiness } from '#services/certificate_template_readiness_service'
+
+export const ELIGIBLE_CERTIFICATE_STATUS = 'LULUS KEGIATAN'
 
 export type CertificateParticipantData = {
   registration_id: number
@@ -10,6 +18,7 @@ export type CertificateParticipantData = {
   name: string
   email: string
   university: string
+  gender: string
   activity_name: string
   activity_date: string
 }
@@ -23,40 +32,23 @@ export type CertificateActivityData = {
 export type CertificateTemplateData = {
   id: number
   name: string
+  version: number
   background_image: string | null
-  template_data: {
-    backgroundUrl: string | null
-    elements: Array<{
-      id: string
-      type: 'static-text' | 'variable-text' | 'image' | 'qr-code' | 'signature'
-      name?: string
-      x: number
-      y: number
-      width: number
-      height: number
-      content?: string
-      variable?: string
-      fontSize?: number
-      fontFamily?: string
-      color?: string
-      textAlign?: 'left' | 'center' | 'right'
-      verticalAlign?: 'top' | 'middle' | 'bottom'
-      fontWeight?: 'normal' | 'bold'
-      fontStyle?: 'normal' | 'italic'
-      textDecoration?: 'none' | 'underline'
-      lineHeight?: number
-      letterSpacing?: number
-      imageUrl?: string
-      opacity?: number
-      rotation?: number
-      borderRadius?: number
-      objectFit?: 'contain' | 'cover' | 'fill'
-      visible?: boolean
-      locked?: boolean
-    }>
-    canvasWidth: number
-    canvasHeight: number
-  }
+  template_data: CertificateTemplate['templateData']
+}
+
+export type IssuedCertificateData = {
+  id: number
+  certificate_code: string
+  registration_id: number
+  activity_id: number
+  template_id: number
+  template_version: number
+  issued_at: string
+  issued_by: number | null
+  revoked_at: string | null
+  revoked_reason: string | null
+  revoked_by: number | null
 }
 
 export type CertificateResponseData = {
@@ -66,68 +58,120 @@ export type CertificateResponseData = {
   certificate?: IssuedCertificateData
 }
 
-export type IssuedCertificateData = {
+export type CertificateErrorType =
+  | 'REGISTRATION_NOT_FOUND'
+  | 'REGISTRATION_NOT_ELIGIBLE'
+  | 'ACTIVITY_NOT_FOUND'
+  | 'NO_CERTIFICATE_TEMPLATE'
+  | 'CERTIFICATE_TEMPLATE_NOT_FOUND'
+  | 'CERTIFICATE_TEMPLATE_NOT_PUBLISHED'
+  | 'CERTIFICATE_TEMPLATE_NOT_READY'
+  | 'INVALID_STATUS'
+  | 'CERTIFICATE_NOT_FOUND'
+  | 'CERTIFICATE_ALREADY_REVOKED'
+
+export type CertificateResult =
+  | { success: true; data: CertificateResponseData }
+  | { success: false; error: CertificateErrorType; details?: string[] }
+
+export type IssueCertificateResult =
+  | { success: true; data: CertificateResponseData; issued: IssuedCertificate; created: boolean }
+  | { success: false; error: CertificateErrorType; details?: string[] }
+
+export type BulkCertificateResult = {
+  created: CertificateResponseData[]
+  already_issued: CertificateResponseData[]
+  issued: CertificateResponseData[]
+  skipped: Array<{ registration_id: number; reason: CertificateErrorType }>
+  failed: Array<{ registration_id: number; reason: string }>
+  total_requested: number
+  total_created: number
+  total_already_issued: number
+  total_skipped: number
+  total_failed: number
+}
+
+export type IssuedCertificateListItem = {
   id: number
   certificate_code: string
   registration_id: number
   activity_id: number
-  template_id: number
+  participant_name: string
+  participant_email: string
+  activity_name: string
+  template_name: string
   issued_at: string
+  issued_by: number | null
+  issued_by_name: string | null
   revoked_at: string | null
   revoked_reason: string | null
+  revoked_by: number | null
+  revoked_by_name: string | null
+  state: 'issued_active' | 'issued_revoked'
 }
 
-export type CertificateErrorType =
-  | 'REGISTRATION_NOT_FOUND'
-  | 'ACTIVITY_NOT_FOUND'
-  | 'NO_CERTIFICATE_TEMPLATE'
-  | 'CERTIFICATE_TEMPLATE_NOT_FOUND'
-  | 'INVALID_STATUS'
-  | 'CERTIFICATE_NOT_FOUND'
-  | 'CERTIFICATE_REVOKED'
-
-export type CertificateResult =
-  | { success: true; data: CertificateResponseData }
-  | { success: false; error: CertificateErrorType }
-
-export type IssueCertificateResult =
-  | { success: true; data: CertificateResponseData; issued: IssuedCertificate; created: boolean }
-  | { success: false; error: CertificateErrorType }
-
-async function fetchRegistration(registrationId: number) {
-  return ActivityRegistration.query()
-    .where('id', registrationId)
-    .where('status', 'LULUS KEGIATAN')
-    .preload('publicUser', (query) => {
-      query.preload('profile', (profileQuery) => {
-        profileQuery.preload('university')
-      })
-    })
-    .first()
-}
-
-async function fetchActivity(activityId: number) {
-  return Activity.find(activityId)
-}
-
-async function fetchTemplate(templateId: number) {
-  return CertificateTemplate.find(templateId)
-}
-
-function buildParticipantData(
-  registration: ActivityRegistration,
+type LoadedCertificateSource = {
+  registration: ActivityRegistration
   activity: Activity
-): CertificateParticipantData {
+  template: CertificateTemplate
+  participant: CertificateParticipantData
+  activityData: CertificateActivityData
+  templateData: CertificateTemplateData
+}
+
+function guestString(registration: ActivityRegistration, key: string): string {
+  const value = registration.guestData?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+async function resolveGuestUniversity(
+  registration: ActivityRegistration,
+  client: QueryClientContract
+): Promise<string> {
+  const directUniversity = guestString(registration, 'university')
+  if (directUniversity) {
+    return directUniversity
+  }
+
+  const rawUniversityId = registration.guestData?.university_id
+  const universityId =
+    typeof rawUniversityId === 'number'
+      ? rawUniversityId
+      : typeof rawUniversityId === 'string' && /^\d+$/.test(rawUniversityId)
+        ? Number(rawUniversityId)
+        : null
+
+  if (!universityId) {
+    return ''
+  }
+
+  const university = await University.query({ client }).where('id', universityId).first()
+  return university?.name ?? ''
+}
+
+async function buildParticipantData(
+  registration: ActivityRegistration,
+  activity: Activity,
+  client: QueryClientContract
+): Promise<CertificateParticipantData> {
+  const isGuest = registration.userId === null
   const profile = registration.publicUser?.profile
 
   return {
     registration_id: registration.id,
     user_id: registration.userId,
-    name: profile?.name || registration.publicUser?.email || 'Unknown',
-    email: registration.publicUser?.email || '',
-    university: profile?.university?.name || '',
+    name: isGuest
+      ? guestString(registration, 'name') || 'Unknown'
+      : profile?.name || registration.publicUser?.email || 'Unknown',
+    email: isGuest ? guestString(registration, 'email') : registration.publicUser?.email || '',
+    university: isGuest
+      ? await resolveGuestUniversity(registration, client)
+      : profile?.university?.name || '',
+    gender: isGuest ? guestString(registration, 'gender') : profile?.gender || '',
     activity_name: activity.name,
-    activity_date: activity.activityStart ? activity.activityStart.toFormat('dd MMMM yyyy') : '',
+    activity_date: activity.activityStart
+      ? activity.activityStart.setLocale('id').toFormat('dd MMMM yyyy')
+      : '',
   }
 }
 
@@ -143,6 +187,7 @@ function buildTemplateData(template: CertificateTemplate): CertificateTemplateDa
   return {
     id: template.id,
     name: template.name,
+    version: template.version,
     background_image: template.backgroundImage,
     template_data: template.templateData,
   }
@@ -155,196 +200,354 @@ function buildIssuedCertificateData(issued: IssuedCertificate): IssuedCertificat
     registration_id: issued.registrationId,
     activity_id: issued.activityId,
     template_id: issued.templateId,
+    template_version: issued.templateVersion,
     issued_at: issued.issuedAt.toISO() ?? '',
+    issued_by: issued.issuedBy,
     revoked_at: issued.revokedAt?.toISO() ?? null,
     revoked_reason: issued.revokedReason,
+    revoked_by: issued.revokedBy,
   }
 }
 
-function buildIssuedResponseData(issued: IssuedCertificate): CertificateResponseData {
+export function buildIssuedResponseData(issued: IssuedCertificate): CertificateResponseData {
   return {
-    activity: {
+    activity: issued.activitySnapshot ?? {
       id: issued.activityId,
       name: issued.participantSnapshot.activity_name,
       activity_start: null,
     },
     template: issued.templateSnapshot,
-    participant: issued.participantSnapshot,
+    participant: {
+      ...issued.participantSnapshot,
+      gender: issued.participantSnapshot.gender ?? '',
+    },
     certificate: buildIssuedCertificateData(issued),
   }
 }
 
-async function generateCertificateCode(activityId: number): Promise<string> {
-  const year = DateTime.now().toFormat('yyyy')
+async function loadCertificateSource(
+  registrationId: number,
+  client: QueryClientContract,
+  lockRows: boolean
+): Promise<
+  | { success: true; data: LoadedCertificateSource }
+  | { success: false; error: CertificateErrorType; details?: string[] }
+> {
+  let registrationQuery = ActivityRegistration.query({ client })
+    .where('id', registrationId)
+    .preload('publicUser', (query) => {
+      query.preload('profile', (profileQuery) => profileQuery.preload('university'))
+    })
 
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const randomPart = Math.random().toString(36).slice(2, 8).toUpperCase()
-    const code = `CERT-${year}-${activityId}-${randomPart}`
-    const existing = await IssuedCertificate.findBy('certificateCode', code)
-
-    if (!existing) {
-      return code
-    }
+  if (lockRows) {
+    registrationQuery = registrationQuery.forUpdate()
   }
 
-  return `CERT-${year}-${activityId}-${Date.now()}`
-}
-
-export async function buildCertificateData(registrationId: number): Promise<CertificateResult> {
-  const registration = await fetchRegistration(registrationId)
-
+  const registration = await registrationQuery.first()
   if (!registration) {
     return { success: false, error: 'REGISTRATION_NOT_FOUND' }
   }
+  if (registration.status !== ELIGIBLE_CERTIFICATE_STATUS) {
+    return { success: false, error: 'REGISTRATION_NOT_ELIGIBLE' }
+  }
 
-  const activity = await fetchActivity(registration.activityId)
-
+  let activityQuery = Activity.query({ client }).where('id', registration.activityId)
+  if (lockRows) {
+    activityQuery = activityQuery.forUpdate()
+  }
+  const activity = await activityQuery.first()
   if (!activity) {
     return { success: false, error: 'ACTIVITY_NOT_FOUND' }
   }
 
-  const templateId = activity.additionalConfig?.certificate_template_id
-
+  const templateId =
+    activity.certificateTemplateId ?? activity.additionalConfig?.certificate_template_id ?? null
   if (!templateId) {
     return { success: false, error: 'NO_CERTIFICATE_TEMPLATE' }
   }
 
-  const template = await fetchTemplate(templateId)
-
+  let templateQuery = CertificateTemplate.query({ client }).where('id', templateId)
+  if (lockRows) {
+    templateQuery = templateQuery.forUpdate()
+  }
+  const template = await templateQuery.first()
   if (!template) {
     return { success: false, error: 'CERTIFICATE_TEMPLATE_NOT_FOUND' }
+  }
+  if (template.lifecycleStatus !== 'published') {
+    return { success: false, error: 'CERTIFICATE_TEMPLATE_NOT_PUBLISHED' }
+  }
+
+  const readiness = getCertificateTemplateReadiness(template)
+  if (!readiness.ready) {
+    return {
+      success: false,
+      error: 'CERTIFICATE_TEMPLATE_NOT_READY',
+      details: readiness.errors,
+    }
   }
 
   return {
     success: true,
     data: {
-      activity: buildActivityData(activity),
-      template: buildTemplateData(template),
-      participant: buildParticipantData(registration, activity),
+      registration,
+      activity,
+      template,
+      participant: await buildParticipantData(registration, activity, client),
+      activityData: buildActivityData(activity),
+      templateData: buildTemplateData(template),
     },
   }
+}
+
+export async function buildCertificateData(registrationId: number): Promise<CertificateResult> {
+  return db.transaction(async (trx) => {
+    const source = await loadCertificateSource(registrationId, trx, false)
+    if (!source.success) {
+      return source
+    }
+
+    return {
+      success: true,
+      data: {
+        activity: source.data.activityData,
+        template: source.data.templateData,
+        participant: source.data.participant,
+      },
+    }
+  })
+}
+
+async function insertIssuedCertificate(
+  source: LoadedCertificateSource,
+  issuedBy: number | null,
+  trx: TransactionClientContract
+): Promise<{ issued: IssuedCertificate; created: boolean }> {
+  const issuedAt = DateTime.now()
+  const inserted = (await trx
+    .knexClient('issued_certificates')
+    .insert({
+      certificate_code: generateCertificateCode(source.activity.id),
+      registration_id: source.registration.id,
+      activity_id: source.activity.id,
+      user_id: source.registration.userId,
+      template_id: source.template.id,
+      template_snapshot: source.templateData,
+      participant_snapshot: source.participant,
+      activity_snapshot: source.activityData,
+      snapshot_version: 1,
+      template_version: source.template.version,
+      issued_by: issuedBy,
+      issued_at: issuedAt.toSQL(),
+      revoked_at: null,
+      revoked_reason: null,
+      revoked_by: null,
+      created_at: issuedAt.toSQL(),
+      updated_at: issuedAt.toSQL(),
+    })
+    .onConflict('registration_id')
+    .ignore()
+    .returning('id')) as Array<{ id: number }>
+
+  const issued = await IssuedCertificate.query({ client: trx })
+    .where('registrationId', source.registration.id)
+    .firstOrFail()
+
+  return { issued, created: inserted.length > 0 }
 }
 
 export async function issueSingleCertificate(
   registrationId: number,
-  issuedBy: number | null
+  issuedBy: number | null,
+  requestId?: string
 ): Promise<IssueCertificateResult> {
-  const existing = await IssuedCertificate.query().where('registrationId', registrationId).first()
+  const result = await db.transaction(async (trx) => {
+    const existing = await IssuedCertificate.query({ client: trx })
+      .where('registrationId', registrationId)
+      .first()
 
-  if (existing) {
-    return {
-      success: true,
-      data: buildIssuedResponseData(existing),
-      issued: existing,
-      created: false,
+    if (existing) {
+      return {
+        success: true as const,
+        data: buildIssuedResponseData(existing),
+        issued: existing,
+        created: false,
+      }
     }
-  }
 
-  const result = await buildCertificateData(registrationId)
+    const source = await loadCertificateSource(registrationId, trx, true)
+    if (!source.success) {
+      return source
+    }
 
-  if (!result.success) {
-    return result
-  }
-
-  const issued = await IssuedCertificate.create({
-    certificateCode: await generateCertificateCode(result.data.activity.id),
-    registrationId: result.data.participant.registration_id,
-    activityId: result.data.activity.id,
-    userId: result.data.participant.user_id,
-    templateId: result.data.template.id,
-    templateSnapshot: result.data.template,
-    participantSnapshot: result.data.participant,
-    issuedBy,
-    issuedAt: DateTime.now(),
+    const persisted = await insertIssuedCertificate(source.data, issuedBy, trx)
+    return {
+      success: true as const,
+      data: buildIssuedResponseData(persisted.issued),
+      issued: persisted.issued,
+      created: persisted.created,
+    }
   })
 
-  return {
-    success: true,
-    data: {
-      ...result.data,
-      certificate: buildIssuedCertificateData(issued),
-    },
-    issued,
-    created: true,
+  if (result.success) {
+    logger.info({
+      event: result.created ? 'certificate_issued' : 'certificate_issue_reused',
+      request_id: requestId,
+      actor_admin_id: issuedBy,
+      registration_id: registrationId,
+      certificate_id: result.issued.id,
+      certificate_code: result.issued.certificateCode,
+    })
   }
+
+  return result
 }
 
 export async function issueBulkCertificates(
   registrationIds: number[],
-  issuedBy: number | null
-): Promise<{
-  issued: CertificateResponseData[]
-  skipped: Array<{ registration_id: number; reason: CertificateErrorType }>
-}> {
-  const issued: CertificateResponseData[] = []
-  const skipped: Array<{ registration_id: number; reason: CertificateErrorType }> = []
+  issuedBy: number | null,
+  requestId?: string
+): Promise<BulkCertificateResult> {
+  const uniqueRegistrationIds = [...new Set(registrationIds)]
+  const created: CertificateResponseData[] = []
+  const alreadyIssued: CertificateResponseData[] = []
+  const skipped: BulkCertificateResult['skipped'] = []
+  const failed: BulkCertificateResult['failed'] = []
 
-  for (const registrationId of registrationIds) {
-    const result = await issueSingleCertificate(registrationId, issuedBy)
-
-    if (result.success) {
-      issued.push(result.data)
-    } else {
-      skipped.push({ registration_id: registrationId, reason: result.error })
+  for (const registrationId of uniqueRegistrationIds) {
+    try {
+      const result = await issueSingleCertificate(registrationId, issuedBy, requestId)
+      if (!result.success) {
+        skipped.push({ registration_id: registrationId, reason: result.error })
+      } else if (result.created) {
+        created.push(result.data)
+      } else {
+        alreadyIssued.push(result.data)
+      }
+    } catch {
+      failed.push({ registration_id: registrationId, reason: 'GENERAL_ERROR' })
     }
   }
 
-  return { issued, skipped }
+  logger.info({
+    event: 'certificate_bulk_issue_completed',
+    request_id: requestId,
+    actor_admin_id: issuedBy,
+    total_requested: uniqueRegistrationIds.length,
+    total_created: created.length,
+    total_already_issued: alreadyIssued.length,
+    total_skipped: skipped.length,
+    total_failed: failed.length,
+  })
+
+  return {
+    created,
+    already_issued: alreadyIssued,
+    issued: created,
+    skipped,
+    failed,
+    total_requested: uniqueRegistrationIds.length,
+    total_created: created.length,
+    total_already_issued: alreadyIssued.length,
+    total_skipped: skipped.length,
+    total_failed: failed.length,
+  }
 }
 
-export async function listIssuedCertificates(activityId?: number): Promise<IssuedCertificate[]> {
-  const query = IssuedCertificate.query().orderBy('issuedAt', 'desc')
+export async function listIssuedCertificates(options: {
+  activityId?: number
+  page: number
+  perPage: number
+}): Promise<{ meta: Record<string, unknown>; data: IssuedCertificateListItem[] }> {
+  const query = IssuedCertificate.query()
+    .preload('issuer')
+    .preload('revoker')
+    .orderBy('issuedAt', 'desc')
 
-  if (activityId) {
-    query.where('activityId', activityId)
+  if (options.activityId) {
+    query.where('activityId', options.activityId)
   }
 
-  return query
+  const certificates = await query.paginate(options.page, options.perPage)
+  const serialized = certificates.serialize()
+
+  return {
+    meta: serialized.meta,
+    data: certificates.all().map((issued) => ({
+      id: issued.id,
+      certificate_code: issued.certificateCode,
+      registration_id: issued.registrationId,
+      activity_id: issued.activityId,
+      participant_name: issued.participantSnapshot.name,
+      participant_email: issued.participantSnapshot.email,
+      activity_name: issued.participantSnapshot.activity_name,
+      template_name: issued.templateSnapshot.name,
+      issued_at: issued.issuedAt.toISO() ?? '',
+      issued_by: issued.issuedBy,
+      issued_by_name: issued.issuer?.displayName ?? null,
+      revoked_at: issued.revokedAt?.toISO() ?? null,
+      revoked_reason: issued.revokedReason,
+      revoked_by: issued.revokedBy,
+      revoked_by_name: issued.revoker?.displayName ?? null,
+      state: issued.revokedAt ? 'issued_revoked' : 'issued_active',
+    })),
+  }
 }
 
 export async function getIssuedCertificateById(id: number): Promise<CertificateResult> {
   const issued = await IssuedCertificate.find(id)
-
-  if (!issued) {
-    return { success: false, error: 'CERTIFICATE_NOT_FOUND' }
-  }
-
-  return { success: true, data: buildIssuedResponseData(issued) }
+  return issued
+    ? { success: true, data: buildIssuedResponseData(issued) }
+    : { success: false, error: 'CERTIFICATE_NOT_FOUND' }
 }
 
 export async function getIssuedCertificateByCode(code: string): Promise<CertificateResult> {
-  const issued = await IssuedCertificate.findBy('certificateCode', code)
-
-  if (!issued) {
-    return { success: false, error: 'CERTIFICATE_NOT_FOUND' }
-  }
-
-  return { success: true, data: buildIssuedResponseData(issued) }
+  const normalizedCode = code.trim().toUpperCase()
+  const issued = await IssuedCertificate.findBy('certificateCode', normalizedCode)
+  return issued
+    ? { success: true, data: buildIssuedResponseData(issued) }
+    : { success: false, error: 'CERTIFICATE_NOT_FOUND' }
 }
 
 export async function revokeIssuedCertificate(
   id: number,
-  reason: string | null
+  reason: string,
+  revokedBy: number,
+  requestId?: string
 ): Promise<CertificateResult> {
-  const issued = await IssuedCertificate.find(id)
+  const result = await db.transaction(async (trx) => {
+    const issued = await IssuedCertificate.query({ client: trx })
+      .where('id', id)
+      .forUpdate()
+      .first()
+    if (!issued) {
+      return { success: false as const, error: 'CERTIFICATE_NOT_FOUND' as const }
+    }
+    if (issued.revokedAt) {
+      return { success: false as const, error: 'CERTIFICATE_ALREADY_REVOKED' as const }
+    }
 
-  if (!issued) {
-    return { success: false, error: 'CERTIFICATE_NOT_FOUND' }
+    issued.useTransaction(trx)
+    await issued.merge({ revokedAt: DateTime.now(), revokedReason: reason, revokedBy }).save()
+    return { success: true as const, data: buildIssuedResponseData(issued) }
+  })
+
+  if (result.success) {
+    logger.warn({
+      event: 'certificate_revoked',
+      request_id: requestId,
+      actor_admin_id: revokedBy,
+      certificate_id: id,
+      reason,
+    })
   }
 
-  await issued
-    .merge({
-      revokedAt: DateTime.now(),
-      revokedReason: reason,
-    })
-    .save()
-
-  return { success: true, data: buildIssuedResponseData(issued) }
+  return result
 }
 
 export async function buildBulkCertificateData(
   activityId: number,
-  status: string = 'LULUS KEGIATAN'
+  status: string = ELIGIBLE_CERTIFICATE_STATUS
 ): Promise<
   | {
       success: true
@@ -354,57 +557,54 @@ export async function buildBulkCertificateData(
         participants: CertificateParticipantData[]
       }
     }
-  | { success: false; error: CertificateErrorType }
+  | { success: false; error: CertificateErrorType; details?: string[] }
 > {
-  const activity = await fetchActivity(activityId)
+  return db.transaction(async (trx) => {
+    const activity = await Activity.query({ client: trx }).where('id', activityId).first()
+    if (!activity) {
+      return { success: false, error: 'ACTIVITY_NOT_FOUND' }
+    }
 
-  if (!activity) {
-    return { success: false, error: 'ACTIVITY_NOT_FOUND' }
-  }
+    const templateId =
+      activity.certificateTemplateId ?? activity.additionalConfig?.certificate_template_id ?? null
+    if (!templateId) {
+      return { success: false, error: 'NO_CERTIFICATE_TEMPLATE' }
+    }
 
-  const templateId = activity.additionalConfig?.certificate_template_id
+    const template = await CertificateTemplate.query({ client: trx })
+      .where('id', templateId)
+      .first()
+    if (!template) {
+      return { success: false, error: 'CERTIFICATE_TEMPLATE_NOT_FOUND' }
+    }
+    if (template.lifecycleStatus !== 'published') {
+      return { success: false, error: 'CERTIFICATE_TEMPLATE_NOT_PUBLISHED' }
+    }
 
-  if (!templateId) {
-    return { success: false, error: 'NO_CERTIFICATE_TEMPLATE' }
-  }
+    const readiness = getCertificateTemplateReadiness(template)
+    if (!readiness.ready) {
+      return {
+        success: false,
+        error: 'CERTIFICATE_TEMPLATE_NOT_READY',
+        details: readiness.errors,
+      }
+    }
 
-  const template = await fetchTemplate(templateId)
+    const registrations = await ActivityRegistration.query({ client: trx })
+      .where('activityId', activityId)
+      .where('status', status)
+      .preload('publicUser', (query) => {
+        query.preload('profile', (profileQuery) => profileQuery.preload('university'))
+      })
 
-  if (!template) {
-    return { success: false, error: 'CERTIFICATE_TEMPLATE_NOT_FOUND' }
-  }
+    if (registrations.length === 0) {
+      return { success: false, error: 'INVALID_STATUS' }
+    }
 
-  const registrations = await ActivityRegistration.query()
-    .where('activity_id', activityId)
-    .where('status', status)
-    .preload('publicUser', (query) => {
-      query.preload('profile')
-    })
+    const participants = await Promise.all(
+      registrations.map((registration) => buildParticipantData(registration, activity, trx))
+    )
 
-  if (registrations.length === 0) {
-    return { success: false, error: 'INVALID_STATUS' }
-  }
-
-  const participants = registrations.map((reg) => buildParticipantData(reg, activity))
-
-  return {
-    success: true,
-    data: {
-      activity,
-      template,
-      participants,
-    },
-  }
-}
-
-export async function validateRegistrationOwnership(
-  registrationId: number,
-  userId: number
-): Promise<boolean> {
-  const registration = await ActivityRegistration.query()
-    .where('id', registrationId)
-    .where('userId', userId)
-    .first()
-
-  return registration !== null
+    return { success: true, data: { activity, template, participants } }
+  })
 }
