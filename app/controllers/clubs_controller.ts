@@ -16,6 +16,7 @@ import {
 } from '#validators/club_validator'
 import { updateClubRegistrationInfoValidator } from '#validators/club_registration_validator'
 import { getYoutubeVideoId, hasDuplicateMediaUrls, hasMediaUrl } from '#services/club_media_service'
+import { InvalidImageError, storeOptimizedImage } from '#services/image_upload_service'
 
 type ClubUpdateData = Partial<{
   name: string
@@ -29,6 +30,8 @@ type ClubUpdateData = Partial<{
   isRegistrationOpen: boolean
   registrationEndDate: DateTime | null
 }>
+
+const MAX_CLUB_MEDIA_ITEMS = 20
 
 export default class ClubsController {
   async index({ request, response }: HttpContext) {
@@ -247,6 +250,8 @@ export default class ClubsController {
   async uploadLogo({ request, params, response }: HttpContext) {
     const payload = await request.validateUsing(logoValidator)
     const clubId = params.id
+    let uploadedKey: string | null = null
+
     try {
       const club = await Club.find(clubId)
       if (!club) {
@@ -255,29 +260,56 @@ export default class ClubsController {
         })
       }
 
-      // Delete old logo if exists
-      if (club.logo) {
-        try {
-          await drive.use().delete(club.logo)
-        } catch (error) {
-          // File might not exist, continue
-        }
+      uploadedKey = await storeOptimizedImage(
+        payload.file,
+        `club/club_logo_${clubId}_${randomUUID()}`,
+        'logo'
+      )
+      const storedLogoKey = uploadedKey
+
+      const result = await db.transaction(async (trx) => {
+        const lockedClub = await Club.query({ client: trx }).where('id', clubId).forUpdate().first()
+
+        if (!lockedClub) return { error: 'CLUB_NOT_FOUND' } as const
+
+        const previousLogo = lockedClub.logo
+        lockedClub.useTransaction(trx)
+        await lockedClub.merge({ logo: storedLogoKey }).save()
+        return { logo: storedLogoKey, previousLogo } as const
+      })
+
+      if ('error' in result) {
+        await drive
+          .use()
+          .delete(uploadedKey)
+          .catch(() => undefined)
+        uploadedKey = null
+        return response.notFound({ message: result.error })
       }
 
-      const logo = payload.file
-      const fileName = `club_logo_${clubId}_${Date.now()}.${logo.extname}`
-      await logo.moveToDisk(`club/${fileName}`)
-
-      await club.merge({ logo: `club/${fileName}` }).save()
+      if (result.previousLogo && result.previousLogo !== result.logo) {
+        await drive
+          .use()
+          .delete(result.previousLogo)
+          .catch(() => undefined)
+      }
 
       return response.ok({
         message: 'UPLOAD_LOGO_SUCCESS',
-        data: { logo: `club/${fileName}` },
+        data: { logo: result.logo },
       })
     } catch (error) {
+      if (uploadedKey) {
+        await drive
+          .use()
+          .delete(uploadedKey)
+          .catch(() => undefined)
+      }
+      if (error instanceof InvalidImageError) {
+        return response.unprocessableEntity({ message: error.message })
+      }
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
       })
     }
   }
@@ -285,6 +317,8 @@ export default class ClubsController {
   async uploadImageMedia({ request, params, response }: HttpContext) {
     const payload = await request.validateUsing(imageMediaValidator)
     const clubId = params.id
+    let mediaUrl: string | null = null
+
     try {
       const club = await Club.find(clubId)
       if (!club) {
@@ -293,11 +327,16 @@ export default class ClubsController {
         })
       }
 
-      const media = payload.file
-      const fileName = `club_media_${clubId}_${randomUUID()}.${media.extname}`
-      const mediaUrl = `club/${fileName}`
+      if ((club.media?.items?.length ?? 0) >= MAX_CLUB_MEDIA_ITEMS) {
+        return response.conflict({ message: 'CLUB_MEDIA_LIMIT_REACHED' })
+      }
 
-      await media.moveToDisk(mediaUrl)
+      mediaUrl = await storeOptimizedImage(
+        payload.file,
+        `club/club_media_${clubId}_${randomUUID()}`,
+        'gallery'
+      )
+      const storedMediaUrl = mediaUrl
 
       try {
         const result = await db.transaction(async (trx) => {
@@ -312,11 +351,15 @@ export default class ClubsController {
             ? [...lockedClub.media.items]
             : []
 
-          if (hasMediaUrl(currentItems, mediaUrl)) {
+          if (currentItems.length >= MAX_CLUB_MEDIA_ITEMS) {
+            return { error: 'CLUB_MEDIA_LIMIT_REACHED' } as const
+          }
+
+          if (hasMediaUrl(currentItems, storedMediaUrl)) {
             return { error: 'MEDIA_ALREADY_EXISTS' } as const
           }
 
-          currentItems.push({ media_url: mediaUrl, media_type: 'image' })
+          currentItems.push({ media_url: storedMediaUrl, media_type: 'image' })
           const mediaStructure = { items: currentItems }
 
           lockedClub.useTransaction(trx)
@@ -329,6 +372,7 @@ export default class ClubsController {
             .use()
             .delete(mediaUrl)
             .catch(() => undefined)
+          mediaUrl = null
 
           if (result.error === 'CLUB_NOT_FOUND') {
             return response.notFound({ message: result.error })
@@ -342,16 +386,27 @@ export default class ClubsController {
           data: { media: result.media },
         })
       } catch (error) {
+        if (mediaUrl) {
+          await drive
+            .use()
+            .delete(mediaUrl)
+            .catch(() => undefined)
+          mediaUrl = null
+        }
+        throw error
+      }
+    } catch (error) {
+      if (mediaUrl) {
         await drive
           .use()
           .delete(mediaUrl)
           .catch(() => undefined)
-        throw error
       }
-    } catch (error) {
+      if (error instanceof InvalidImageError) {
+        return response.unprocessableEntity({ message: error.message })
+      }
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
       })
     }
   }
@@ -385,6 +440,10 @@ export default class ClubsController {
         const currentItems = Array.isArray(lockedClub.media?.items)
           ? [...lockedClub.media.items]
           : []
+
+        if (currentItems.length >= MAX_CLUB_MEDIA_ITEMS) {
+          return { error: 'CLUB_MEDIA_LIMIT_REACHED' } as const
+        }
 
         if (hasMediaUrl(currentItems, embedUrl)) {
           return { error: 'MEDIA_ALREADY_EXISTS' } as const

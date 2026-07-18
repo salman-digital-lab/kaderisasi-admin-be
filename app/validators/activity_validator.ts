@@ -80,8 +80,20 @@ export const imageValidator = vine.compile(
   vine.object({
     file: vine.file({
       size: '1mb',
-      extnames: ['jpg', 'png', 'jpeg', 'PNG', 'JPG', 'JPEG', 'webp', 'WEBP'],
+      extnames: ['jpg', 'png', 'jpeg', 'webp'],
     }),
+  })
+)
+
+export const deleteActivityImageValidator = vine.compile(
+  vine.object({
+    image: vine.string().trim().minLength(1).maxLength(1024),
+  })
+)
+
+export const reorderActivityImagesValidator = vine.compile(
+  vine.object({
+    images: vine.array(vine.string().trim().minLength(1).maxLength(1024)).maxLength(8),
   })
 )
 

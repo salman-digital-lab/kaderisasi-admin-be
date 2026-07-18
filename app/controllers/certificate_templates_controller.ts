@@ -26,6 +26,7 @@ import {
   matchesCertificateTemplateVersion,
   nextCertificateTemplateVersion,
 } from '#services/certificate_template_version_service'
+import { InvalidImageError, storeOptimizedImage } from '#services/image_upload_service'
 
 const DEFAULT_TEMPLATE_DATA: TemplateData = {
   backgroundUrl: null,
@@ -489,9 +490,12 @@ export default class CertificateTemplatesController {
 
       const file = payload.file
       const assetVersion = template.backgroundAssetVersion + 1
-      const extension = file.extname?.toLowerCase() ?? 'img'
-      uploadedKey = `certificate/templates/${template.id}/background/v${assetVersion}-${randomUUID()}.${extension}`
-      await file.moveToDisk(uploadedKey)
+      const previousBackground = template.backgroundImage
+      uploadedKey = await storeOptimizedImage(
+        file,
+        `certificate/templates/${template.id}/background/v${assetVersion}-${randomUUID()}`,
+        'certificate'
+      )
 
       try {
         await template
@@ -507,6 +511,13 @@ export default class CertificateTemplatesController {
           .delete(uploadedKey)
           .catch(() => undefined)
         throw error
+      }
+
+      if (previousBackground && previousBackground !== uploadedKey) {
+        await drive
+          .use()
+          .delete(previousBackground)
+          .catch(() => undefined)
       }
 
       logger.info({
@@ -531,6 +542,9 @@ export default class CertificateTemplatesController {
       if (error instanceof errors.E_VALIDATION_ERROR) {
         return validationError(response, error)
       }
+      if (error instanceof InvalidImageError) {
+        return response.unprocessableEntity({ message: error.message })
+      }
       return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
@@ -545,9 +559,11 @@ export default class CertificateTemplatesController {
         return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
       }
 
-      const extension = payload.file.extname?.toLowerCase() ?? 'img'
-      const assetKey = `certificate/templates/${template.id}/assets/v${template.version + 1}-${randomUUID()}.${extension}`
-      await payload.file.moveToDisk(assetKey)
+      const assetKey = await storeOptimizedImage(
+        payload.file,
+        `certificate/templates/${template.id}/assets/v${template.version + 1}-${randomUUID()}`,
+        'certificate'
+      )
 
       logger.info({
         event: 'certificate_template_asset_uploaded',
@@ -563,6 +579,9 @@ export default class CertificateTemplatesController {
     } catch (error) {
       if (error instanceof errors.E_VALIDATION_ERROR) {
         return validationError(response, error)
+      }
+      if (error instanceof InvalidImageError) {
+        return response.unprocessableEntity({ message: error.message })
       }
       return response.internalServerError({ message: 'GENERAL_ERROR' })
     }

@@ -39,15 +39,20 @@ const bodyParserConfig = defineConfig({
      * move all uploaded files inside the tmp folder of your
      * operating system
      */
-    autoProcess: true,
+    autoProcess: [
+      '/v2/activities/:id/images',
+      '/v2/clubs/:id/logo',
+      '/v2/clubs/:id/media/image',
+      '/v2/certificate-templates/:id/background',
+      '/v2/certificate-templates/:id/assets',
+    ],
     convertEmptyStringsToNull: true,
-    processManually: [],
 
     /**
      * Maximum limit of data to parse including all files
      * and fields
      */
-    limit: '20mb',
+    limit: '6mb',
     types: ['multipart/form-data'],
   },
 })

@@ -1,17 +1,24 @@
 import { HttpContext } from '@adonisjs/core/http'
+import { randomUUID } from 'node:crypto'
 import drive from '@adonisjs/drive/services/main'
+import db from '@adonisjs/lucid/services/db'
 
 import Activity, { type AdditionalConfig } from '#models/activity'
 import CertificateTemplate from '#models/certificate_template'
 import { hasCertificatePermission } from '#middleware/certificate_permission_middleware'
 import { getCertificateTemplateReadiness } from '#services/certificate_template_readiness_service'
 import { generateUniqueActivitySlug } from '#services/activity_slug_service'
+import { InvalidImageError, storeOptimizedImage } from '#services/image_upload_service'
 import {
   activityValidator,
+  deleteActivityImageValidator,
+  reorderActivityImagesValidator,
   updateActivityValidator,
   imageValidator,
 } from '#validators/activity_validator'
 import { DateTime } from 'luxon'
+
+const MAX_ACTIVITY_IMAGES = 8
 
 export default class ActivitiesController {
   async index({ request, response }: HttpContext) {
@@ -93,6 +100,8 @@ export default class ActivitiesController {
   async uploadImage({ request, params, response }: HttpContext) {
     const payload = await request.validateUsing(imageValidator)
     const activityId = params.id
+    let uploadedKey: string | null = null
+
     try {
       const activity = await Activity.find(activityId)
       if (!activity) {
@@ -101,89 +110,171 @@ export default class ActivitiesController {
         })
       }
 
-      var fileNames: string[] = []
-      if (activity.additionalConfig.images) {
-        fileNames = activity.additionalConfig.images
+      if ((activity.additionalConfig?.images?.length ?? 0) >= MAX_ACTIVITY_IMAGES) {
+        return response.conflict({
+          message: 'ACTIVITY_IMAGE_LIMIT_REACHED',
+        })
       }
 
-      const image = payload.file
+      uploadedKey = await storeOptimizedImage(
+        payload.file,
+        `activity/${activity.id}/${randomUUID()}`,
+        'gallery'
+      )
+      const storedImageKey = uploadedKey
 
-      await image.moveToDisk(image.clientName || '')
+      const result = await db.transaction(async (trx) => {
+        const lockedActivity = await Activity.query({ client: trx })
+          .where('id', activity.id)
+          .forUpdate()
+          .first()
 
-      fileNames.push(image.clientName || '')
-      const newConfig = activity.additionalConfig
-      newConfig.images = fileNames
+        if (!lockedActivity) return { error: 'ACTIVITY_NOT_FOUND' } as const
 
-      await activity.merge({ additionalConfig: newConfig }).save()
+        const images = [...(lockedActivity.additionalConfig?.images ?? [])]
+        if (images.length >= MAX_ACTIVITY_IMAGES) {
+          return { error: 'ACTIVITY_IMAGE_LIMIT_REACHED' } as const
+        }
+
+        images.push(storedImageKey)
+        const additionalConfig = {
+          ...lockedActivity.additionalConfig,
+          images,
+        }
+
+        lockedActivity.useTransaction(trx)
+        await lockedActivity.merge({ additionalConfig }).save()
+        return { image: storedImageKey, images } as const
+      })
+
+      if ('error' in result) {
+        await drive
+          .use()
+          .delete(uploadedKey)
+          .catch(() => undefined)
+        uploadedKey = null
+
+        if (result.error === 'ACTIVITY_NOT_FOUND') {
+          return response.notFound({ message: result.error })
+        }
+        return response.conflict({ message: result.error })
+      }
 
       return response.ok({
         message: 'UPLOAD_IMAGE_SUCCESS',
+        data: result,
       })
     } catch (error) {
+      if (uploadedKey) {
+        await drive
+          .use()
+          .delete(uploadedKey)
+          .catch(() => undefined)
+      }
+      if (error instanceof InvalidImageError) {
+        return response.unprocessableEntity({ message: error.message })
+      }
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
       })
     }
   }
 
   async deleteImage({ request, params, response }: HttpContext) {
     const activityId = params.id
-    const payload = request.all()
-    const index: number = payload.index
-    try {
-      const activity = await Activity.findOrFail(activityId)
+    const payload = await request.validateUsing(deleteActivityImageValidator)
 
-      if (activity.additionalConfig.images.length === 0) {
-        return response.notFound({
-          message: 'IMAGE_NOT_FOUND',
-        })
+    try {
+      const result = await db.transaction(async (trx) => {
+        const activity = await Activity.query({ client: trx })
+          .where('id', activityId)
+          .forUpdate()
+          .first()
+
+        if (!activity) return { error: 'ACTIVITY_NOT_FOUND' } as const
+
+        const images = [...(activity.additionalConfig?.images ?? [])]
+        const imageIndex = images.indexOf(payload.image)
+        if (imageIndex === -1) return { error: 'IMAGE_NOT_FOUND' } as const
+
+        const [removedImage] = images.splice(imageIndex, 1)
+        const additionalConfig = {
+          ...activity.additionalConfig,
+          images,
+        }
+
+        activity.useTransaction(trx)
+        await activity.merge({ additionalConfig }).save()
+        return { images, removedImage } as const
+      })
+
+      if ('error' in result) {
+        return response.notFound({ message: result.error })
       }
 
-      await drive.use().delete(activity.additionalConfig.images[index])
-
-      const images: string[] = activity.additionalConfig.images
-      images.splice(index, 1)
-      const newConfig = activity.additionalConfig
-      newConfig.images = images
-      await activity.merge({ additionalConfig: newConfig }).save()
+      await drive
+        .use()
+        .delete(result.removedImage)
+        .catch(() => undefined)
 
       return response.ok({
         message: 'DELETE_IMAGE_SUCCESS',
+        data: { images: result.images },
       })
-    } catch (error) {
+    } catch {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
       })
     }
   }
 
   async reorderImages({ request, params, response }: HttpContext) {
     const activityId = params.id
-    const payload = request.all()
-    const images: string[] = payload.images
+    const payload = await request.validateUsing(reorderActivityImagesValidator)
+
     try {
-      const activity = await Activity.findOrFail(activityId)
+      const result = await db.transaction(async (trx) => {
+        const activity = await Activity.query({ client: trx })
+          .where('id', activityId)
+          .forUpdate()
+          .first()
 
-      if (!activity.additionalConfig.images || activity.additionalConfig.images.length === 0) {
-        return response.notFound({
-          message: 'IMAGE_NOT_FOUND',
-        })
+        if (!activity) return { error: 'ACTIVITY_NOT_FOUND' } as const
+
+        const currentImages = activity.additionalConfig?.images ?? []
+        const requestedImages = payload.images
+        const requestedSet = new Set(requestedImages)
+        const hasSameImages =
+          requestedImages.length === currentImages.length &&
+          requestedSet.size === currentImages.length &&
+          currentImages.every((image) => requestedSet.has(image))
+
+        if (!hasSameImages) return { error: 'INVALID_IMAGE_ORDER' } as const
+
+        const additionalConfig = {
+          ...activity.additionalConfig,
+          images: [...requestedImages],
+        }
+
+        activity.useTransaction(trx)
+        await activity.merge({ additionalConfig }).save()
+        return { activity } as const
+      })
+
+      if ('error' in result) {
+        if (result.error === 'ACTIVITY_NOT_FOUND') {
+          return response.notFound({ message: result.error })
+        }
+        return response.badRequest({ message: result.error })
       }
-
-      const newConfig = activity.additionalConfig
-      newConfig.images = images
-      await activity.merge({ additionalConfig: newConfig }).save()
 
       return response.ok({
         message: 'REORDER_IMAGES_SUCCESS',
-        data: activity,
+        data: result.activity,
       })
-    } catch (error) {
+    } catch {
       return response.internalServerError({
         message: 'GENERAL_ERROR',
-        error: error.message,
       })
     }
   }

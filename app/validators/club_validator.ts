@@ -56,7 +56,7 @@ export const logoValidator = vine.compile(
   vine.object({
     file: vine.file({
       size: '2mb',
-      extnames: ['jpg', 'png', 'jpeg', 'PNG', 'JPG', 'JPEG', 'webp', 'WEBP'],
+      extnames: ['jpg', 'png', 'jpeg', 'webp'],
     }),
   })
 )
@@ -65,7 +65,7 @@ export const imageMediaValidator = vine.compile(
   vine.object({
     file: vine.file({
       size: '5mb',
-      extnames: ['jpg', 'png', 'jpeg', 'PNG', 'JPG', 'JPEG', 'webp', 'WEBP'],
+      extnames: ['jpg', 'png', 'jpeg', 'webp'],
     }),
     media_type: vine.literal('image'),
   })

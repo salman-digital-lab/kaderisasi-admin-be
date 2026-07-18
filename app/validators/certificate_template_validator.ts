@@ -68,7 +68,7 @@ export const backgroundImageValidator = vine.compile(
   vine.object({
     file: vine.file({
       size: '5mb',
-      extnames: ['jpg', 'png', 'jpeg', 'PNG', 'JPG', 'JPEG', 'webp', 'WEBP'],
+      extnames: ['jpg', 'png', 'jpeg', 'webp'],
     }),
   })
 )
