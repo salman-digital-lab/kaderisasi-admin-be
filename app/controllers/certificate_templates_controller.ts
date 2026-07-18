@@ -3,6 +3,7 @@ import { DateTime } from 'luxon'
 import type { HttpContext } from '@adonisjs/core/http'
 import logger from '@adonisjs/core/services/logger'
 import drive from '@adonisjs/drive/services/main'
+import db from '@adonisjs/lucid/services/db'
 import { errors } from '@vinejs/vine'
 import Activity from '#models/activity'
 import CertificateTemplate, {
@@ -13,6 +14,7 @@ import IssuedCertificate from '#models/issued_certificate'
 import {
   certificateAssetValidator,
   certificateTemplateValidator,
+  mutateCertificateTemplateLifecycleValidator,
   updateCertificateTemplateValidator,
   backgroundImageValidator,
 } from '#validators/certificate_template_validator'
@@ -20,6 +22,10 @@ import {
   getCertificateTemplateReadiness,
   lifecycleData,
 } from '#services/certificate_template_readiness_service'
+import {
+  matchesCertificateTemplateVersion,
+  nextCertificateTemplateVersion,
+} from '#services/certificate_template_version_service'
 
 const DEFAULT_TEMPLATE_DATA: TemplateData = {
   backgroundUrl: null,
@@ -89,6 +95,14 @@ function validationError(response: HttpContext['response'], error: { messages: u
   return response.status(422).json({
     message: 'VALIDATION_ERROR',
     errors: error.messages,
+  })
+}
+
+function versionConflict(response: HttpContext['response'], template: CertificateTemplate) {
+  return response.conflict({
+    message: 'CERTIFICATE_TEMPLATE_VERSION_CONFLICT',
+    currentVersion: template.version,
+    updatedAt: template.updatedAt.toISO(),
   })
 }
 
@@ -210,90 +224,101 @@ export default class CertificateTemplatesController {
         return response.badRequest({ message: 'INVALID_CERTIFICATE_TEMPLATE_ID' })
       }
 
-      const template = await CertificateTemplate.find(id)
-
-      if (!template) {
-        return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
-      }
-
       const payload = await request.validateUsing(updateCertificateTemplateValidator)
-      let nextTemplateData = payload.templateData as TemplateData | undefined
+      const result = await db.transaction(async (trx) => {
+        const template = await CertificateTemplate.query({ client: trx })
+          .where('id', id)
+          .forUpdate()
+          .first()
 
-      if (payload.backgroundImage) {
-        const expectedPrefix = `certificate/templates/${template.id}/`
-        if (
-          !payload.backgroundImage.startsWith(expectedPrefix) ||
-          !(await drive.use().exists(payload.backgroundImage))
-        ) {
-          return response.status(422).json({ message: 'INVALID_CERTIFICATE_ASSET_KEY' })
+        if (!template) return { kind: 'not-found' as const }
+        if (!matchesCertificateTemplateVersion(template.version, payload.expectedVersion)) {
+          return { kind: 'conflict' as const, template }
         }
 
-        nextTemplateData = { ...(nextTemplateData ?? template.templateData), backgroundUrl: null }
-      }
+        let nextTemplateData = payload.templateData as TemplateData | undefined
+        const backgroundChanged =
+          payload.backgroundImage !== undefined &&
+          payload.backgroundImage !== template.backgroundImage
+        if (payload.backgroundImage) {
+          const expectedPrefix = `certificate/templates/${template.id}/`
+          if (
+            !payload.backgroundImage.startsWith(expectedPrefix) ||
+            !(await drive.use().exists(payload.backgroundImage))
+          ) {
+            return { kind: 'invalid-asset' as const }
+          }
+          nextTemplateData = { ...(nextTemplateData ?? template.templateData), backgroundUrl: null }
+        }
 
-      template.merge({
-        ...(payload.name !== undefined ? { name: payload.name } : {}),
-        ...(payload.description !== undefined ? { description: payload.description } : {}),
-        ...(nextTemplateData !== undefined
-          ? { templateData: nextTemplateData, version: template.version + 1 }
-          : {}),
-        ...(payload.backgroundImage !== undefined
-          ? {
-              backgroundImage: payload.backgroundImage,
-              backgroundAssetVersion: template.backgroundAssetVersion + 1,
-              version: template.version + 1,
-            }
-          : {}),
+        template.merge({
+          ...(payload.name !== undefined ? { name: payload.name } : {}),
+          ...(payload.description !== undefined ? { description: payload.description } : {}),
+          ...(nextTemplateData !== undefined ? { templateData: nextTemplateData } : {}),
+          ...(backgroundChanged
+            ? {
+                backgroundImage: payload.backgroundImage,
+                backgroundAssetVersion: template.backgroundAssetVersion + 1,
+              }
+            : {}),
+        })
+
+        const requestedStatus: CertificateTemplateLifecycle | undefined =
+          payload.status ??
+          (payload.isActive === true
+            ? 'published'
+            : payload.isActive === false && template.lifecycleStatus === 'published'
+              ? 'archived'
+              : undefined)
+
+        if (requestedStatus === 'published') {
+          const readiness = getCertificateTemplateReadiness(template)
+          if (!readiness.ready) return { kind: 'not-ready' as const, readiness }
+          template.merge({
+            lifecycleStatus: 'published',
+            isActive: true,
+            publishedAt: DateTime.now(),
+            archivedAt: null,
+          })
+        } else if (requestedStatus === 'archived') {
+          template.merge({
+            lifecycleStatus: 'archived',
+            isActive: false,
+            archivedAt: DateTime.now(),
+          })
+        } else if (requestedStatus === 'draft') {
+          template.merge({
+            lifecycleStatus: 'draft',
+            isActive: false,
+            publishedAt: null,
+            archivedAt: null,
+          })
+        }
+
+        if (template.lifecycleStatus === 'published') {
+          const readiness = getCertificateTemplateReadiness(template)
+          if (!readiness.ready) return { kind: 'not-ready' as const, readiness }
+        }
+
+        template.version = nextCertificateTemplateVersion(template.version)
+        await template.save()
+        return { kind: 'updated' as const, template }
       })
 
-      const requestedStatus: CertificateTemplateLifecycle | undefined =
-        payload.status ??
-        (payload.isActive === true
-          ? 'published'
-          : payload.isActive === false && template.lifecycleStatus === 'published'
-            ? 'archived'
-            : undefined)
-
-      if (requestedStatus === 'published') {
-        const readiness = getCertificateTemplateReadiness(template)
-        if (!readiness.ready) {
-          return response.status(422).json({
-            message: 'CERTIFICATE_TEMPLATE_NOT_READY',
-            errors: readiness.errors,
-          })
-        }
-        template.merge({
-          lifecycleStatus: 'published',
-          isActive: true,
-          publishedAt: DateTime.now(),
-          archivedAt: null,
-        })
-      } else if (requestedStatus === 'archived') {
-        template.merge({
-          lifecycleStatus: 'archived',
-          isActive: false,
-          archivedAt: DateTime.now(),
-        })
-      } else if (requestedStatus === 'draft') {
-        template.merge({
-          lifecycleStatus: 'draft',
-          isActive: false,
-          publishedAt: null,
-          archivedAt: null,
+      if (result.kind === 'not-found') {
+        return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
+      }
+      if (result.kind === 'conflict') return versionConflict(response, result.template)
+      if (result.kind === 'invalid-asset') {
+        return response.status(422).json({ message: 'INVALID_CERTIFICATE_ASSET_KEY' })
+      }
+      if (result.kind === 'not-ready') {
+        return response.status(422).json({
+          message: 'CERTIFICATE_TEMPLATE_NOT_READY',
+          errors: result.readiness.errors,
         })
       }
-
-      if (template.lifecycleStatus === 'published') {
-        const readiness = getCertificateTemplateReadiness(template)
-        if (!readiness.ready) {
-          return response.status(422).json({
-            message: 'CERTIFICATE_TEMPLATE_NOT_READY',
-            errors: readiness.errors,
-          })
-        }
-      }
-
-      await template.save()
+      const template = result.template
 
       logger.info({
         event: 'certificate_template_updated',
@@ -315,32 +340,45 @@ export default class CertificateTemplatesController {
     }
   }
 
-  async publish({ params, response, auth, requestId }: HttpContext) {
+  async publish({ params, request, response, auth, requestId }: HttpContext) {
     try {
       const id = parsePositiveId(params.id)
-      const template = id ? await CertificateTemplate.find(id) : null
-
-      if (!template) {
+      if (!id) {
         return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
       }
-
-      const readiness = getCertificateTemplateReadiness(template)
-
-      if (!readiness.ready) {
-        return response.status(422).json({
-          message: 'CERTIFICATE_TEMPLATE_NOT_READY',
-          errors: readiness.errors,
-        })
-      }
-
-      await template
-        .merge({
+      const payload = await request.validateUsing(mutateCertificateTemplateLifecycleValidator)
+      const result = await db.transaction(async (trx) => {
+        const template = await CertificateTemplate.query({ client: trx })
+          .where('id', id)
+          .forUpdate()
+          .first()
+        if (!template) return { kind: 'not-found' as const }
+        if (!matchesCertificateTemplateVersion(template.version, payload.expectedVersion)) {
+          return { kind: 'conflict' as const, template }
+        }
+        const readiness = getCertificateTemplateReadiness(template)
+        if (!readiness.ready) return { kind: 'not-ready' as const, readiness }
+        template.merge({
           lifecycleStatus: 'published',
           isActive: true,
           publishedAt: DateTime.now(),
           archivedAt: null,
+          version: nextCertificateTemplateVersion(template.version),
         })
-        .save()
+        await template.save()
+        return { kind: 'updated' as const, template }
+      })
+      if (result.kind === 'not-found') {
+        return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
+      }
+      if (result.kind === 'conflict') return versionConflict(response, result.template)
+      if (result.kind === 'not-ready') {
+        return response.status(422).json({
+          message: 'CERTIFICATE_TEMPLATE_NOT_READY',
+          errors: result.readiness.errors,
+        })
+      }
+      const template = result.template
 
       logger.info({
         event: 'certificate_template_published',
@@ -354,23 +392,44 @@ export default class CertificateTemplatesController {
         message: 'CERTIFICATE_TEMPLATE_PUBLISHED',
         data: serializeTemplate(template),
       })
-    } catch {
+    } catch (error) {
+      if (error instanceof errors.E_VALIDATION_ERROR) {
+        return validationError(response, error)
+      }
       return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }
 
-  async archive({ params, response, auth, requestId }: HttpContext) {
+  async archive({ params, request, response, auth, requestId }: HttpContext) {
     try {
       const id = parsePositiveId(params.id)
-      const template = id ? await CertificateTemplate.find(id) : null
-
-      if (!template) {
+      if (!id) {
         return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
       }
-
-      await template
-        .merge({ lifecycleStatus: 'archived', isActive: false, archivedAt: DateTime.now() })
-        .save()
+      const payload = await request.validateUsing(mutateCertificateTemplateLifecycleValidator)
+      const result = await db.transaction(async (trx) => {
+        const template = await CertificateTemplate.query({ client: trx })
+          .where('id', id)
+          .forUpdate()
+          .first()
+        if (!template) return { kind: 'not-found' as const }
+        if (!matchesCertificateTemplateVersion(template.version, payload.expectedVersion)) {
+          return { kind: 'conflict' as const, template }
+        }
+        template.merge({
+          lifecycleStatus: 'archived',
+          isActive: false,
+          archivedAt: DateTime.now(),
+          version: nextCertificateTemplateVersion(template.version),
+        })
+        await template.save()
+        return { kind: 'updated' as const, template }
+      })
+      if (result.kind === 'not-found') {
+        return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
+      }
+      if (result.kind === 'conflict') return versionConflict(response, result.template)
+      const template = result.template
 
       logger.info({
         event: 'certificate_template_archived',
@@ -383,7 +442,10 @@ export default class CertificateTemplatesController {
         message: 'CERTIFICATE_TEMPLATE_ARCHIVED',
         data: serializeTemplate(template),
       })
-    } catch {
+    } catch (error) {
+      if (error instanceof errors.E_VALIDATION_ERROR) {
+        return validationError(response, error)
+      }
       return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }

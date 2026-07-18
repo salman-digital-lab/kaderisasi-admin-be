@@ -48,12 +48,19 @@ export const certificateTemplateValidator = vine.compile(
 
 export const updateCertificateTemplateValidator = vine.compile(
   vine.object({
+    expectedVersion: vine.number().withoutDecimals().positive(),
     name: vine.string().trim().minLength(1).maxLength(255).optional(),
     description: vine.string().trim().nullable().optional(),
     templateData: templateDataSchema.optional(),
     backgroundImage: vine.string().trim().maxLength(1024).nullable().optional(),
     status: vine.enum(['draft', 'published', 'archived']).optional(),
     isActive: vine.boolean().optional(),
+  })
+)
+
+export const mutateCertificateTemplateLifecycleValidator = vine.compile(
+  vine.object({
+    expectedVersion: vine.number().withoutDecimals().positive(),
   })
 )
 
