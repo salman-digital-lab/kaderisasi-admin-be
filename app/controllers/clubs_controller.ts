@@ -41,6 +41,8 @@ export default class ClubsController {
       const search = request.qs().search
       const requestedClubType = request.qs().club_type
       const clubType = CLUB_TYPES.find((type) => type === requestedClubType)
+      const visibility = request.qs().visibility
+      const registration = request.qs().registration
 
       const query = Club.query()
         .where('name', 'ILIKE', search ? '%' + search + '%' : '%%')
@@ -62,6 +64,14 @@ export default class ClubsController {
 
       if (clubType) {
         query.where('club_type', clubType)
+      }
+
+      if (visibility === 'published' || visibility === 'draft') {
+        query.where('is_show', visibility === 'published')
+      }
+
+      if (registration === 'open' || registration === 'closed') {
+        query.where('is_registration_open', registration === 'open')
       }
 
       const clubs = await query
