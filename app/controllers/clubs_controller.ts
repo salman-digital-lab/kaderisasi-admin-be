@@ -4,7 +4,7 @@ import drive from '@adonisjs/drive/services/main'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 
-import Club, { type ClubType, type MediaStructure } from '#models/club'
+import Club, { CLUB_TYPES, type ClubType, type MediaStructure } from '#models/club'
 import CustomForm from '#models/custom_form'
 import {
   clubValidator,
@@ -39,7 +39,8 @@ export default class ClubsController {
       const page = request.qs().page ?? 1
       const perPage = request.qs().per_page ?? 10
       const search = request.qs().search
-      const clubType = request.qs().club_type
+      const requestedClubType = request.qs().club_type
+      const clubType = CLUB_TYPES.find((type) => type === requestedClubType)
 
       const query = Club.query()
         .where('name', 'ILIKE', search ? '%' + search + '%' : '%%')
@@ -126,7 +127,7 @@ export default class ClubsController {
       // Convert snake_case to camelCase and handle date conversion
       const createData = {
         name: payload.name,
-        clubType: payload.club_type ?? 'UKM',
+        clubType: payload.club_type ?? 'UNIT',
         description: payload.description,
         shortDescription: payload.short_description,
         media: payload.media || { items: [] },
