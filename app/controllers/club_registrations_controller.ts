@@ -41,6 +41,7 @@ export default class ClubRegistrationsController {
       const page = request.input('page', 1)
       const limit = request.input('limit', 20)
       const status = request.input('status')
+      const sortOrder = request.input('sort_order') === 'asc' ? 'asc' : 'desc'
 
       const club = await Club.findOrFail(clubId)
 
@@ -52,7 +53,10 @@ export default class ClubRegistrationsController {
         .preload('roles', (roleQuery) => {
           roleQuery.orderBy('sort_order', 'asc').orderBy('is_primary', 'desc')
         })
-        .orderBy('created_at', 'desc')
+        .orderBy([
+          { column: 'created_at', order: sortOrder, nulls: 'last' },
+          { column: 'id', order: sortOrder },
+        ])
 
       if (status) {
         query.where('status', status)
@@ -81,6 +85,7 @@ export default class ClubRegistrationsController {
       const page = request.input('page', 1)
       const limit = request.input('limit', 20)
       const search = request.input('search')
+      const sortOrder = request.input('sort_order') === 'asc' ? 'asc' : 'desc'
 
       const club = await Club.findOrFail(clubId)
 
@@ -96,7 +101,10 @@ export default class ClubRegistrationsController {
             .orderBy('is_primary', 'desc')
             .orderBy('created_at', 'asc')
         })
-        .orderBy('created_at', 'desc')
+        .orderBy([
+          { column: 'created_at', order: sortOrder, nulls: 'last' },
+          { column: 'id', order: sortOrder },
+        ])
 
       if (search) {
         query.whereHas('member', (memberQuery) => {

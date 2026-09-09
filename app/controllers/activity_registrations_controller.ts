@@ -484,11 +484,12 @@ export default class ActivityRegistrationsController {
     const universityId = request.qs().university_id
     const provinceId = request.qs().province_id
     const intakeYear = request.qs().intake_year
-    const sortBy = request.qs().sort_by ?? 'name'
-    const sortOrder = request.qs().sort_order ?? 'asc'
+    const sortBy = request.qs().sort_by ?? 'created_at'
+    const sortOrder = request.qs().sort_order ?? 'desc'
 
     // Map frontend sort field names to database column names
     const sortFieldMap: Record<string, string> = {
+      created_at: 'activity_registrations.created_at',
       name: 'profiles.name',
       email: 'public_users.email',
       status: 'activity_registrations.status',
@@ -500,8 +501,8 @@ export default class ActivityRegistrationsController {
       whatsapp: 'profiles.whatsapp',
     }
 
-    const sortColumn = sortFieldMap[sortBy] || 'profiles.name'
-    const sortDirection = sortOrder === 'desc' ? 'desc' : 'asc'
+    const sortColumn = sortFieldMap[sortBy] || 'activity_registrations.created_at'
+    const sortDirection = sortOrder === 'asc' ? 'asc' : 'desc'
 
     try {
       const activity = await Activity.findOrFail(activityId)
@@ -567,7 +568,10 @@ export default class ActivityRegistrationsController {
           'activity_registrations.status',
           'activity_registrations.created_at'
         )
-        .orderBy(sortColumn, sortDirection)
+        .orderBy([
+          { column: sortColumn, order: sortDirection, nulls: 'last' },
+          { column: 'activity_registrations.id', order: sortDirection },
+        ])
         .paginate(page, perPage)
 
       return response.ok({

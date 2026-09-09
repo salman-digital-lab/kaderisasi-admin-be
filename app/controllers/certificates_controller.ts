@@ -61,6 +61,7 @@ const recipientsValidator = vine.compile(
   vine.object({
     page: vine.number().positive().withoutDecimals().optional(),
     per_page: vine.number().range([1, 100]).withoutDecimals().optional(),
+    sort_order: vine.enum(['asc', 'desc']).optional(),
     search: vine.string().trim().maxLength(255).optional(),
     state: vine
       .enum(['eligible_not_issued', 'not_eligible', 'issued_active', 'issued_revoked'])
@@ -135,6 +136,7 @@ export default class CertificatesController {
         page: options.page ?? 1,
         perPage: options.per_page ?? 50,
         search: options.search,
+        sortOrder: options.sort_order,
         state: options.state,
         registrationIds: options.registration_ids,
       })

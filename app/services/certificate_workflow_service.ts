@@ -11,6 +11,7 @@ export type RecipientState =
   | 'issued_revoked'
 export interface CertificateRecipient {
   registration_id: number
+  created_at: string | null
   name: string
   status: string
   state: RecipientState
@@ -38,6 +39,7 @@ export async function getCertificateRecipients(
   options: {
     page: number
     perPage: number
+    sortOrder?: 'asc' | 'desc'
     search?: string
     state?: RecipientState
     registrationIds?: number[]
@@ -47,14 +49,24 @@ export async function getCertificateRecipients(
   const templateId =
     activity.certificateTemplateId ?? activity.additionalConfig?.certificate_template_id
   const query = recipientQuery(activityId)
+  const sortOrder = options.sortOrder ?? 'desc'
   if (options.search) query.whereRaw(`${NAME_SQL} ILIKE ?`, [`%${options.search}%`])
   if (options.state) query.whereRaw(`${STATE_SQL} = ?`, [options.state])
   if (options.registrationIds) query.whereIn('r.id', options.registrationIds)
   const [rows, countRows, template] = await Promise.all([
     query
-      .select('r.id as registration_id', 'r.status', 'c.id as certificate_id', 'c.certificate_code')
+      .select(
+        'r.id as registration_id',
+        'r.created_at',
+        'r.status',
+        'c.id as certificate_id',
+        'c.certificate_code'
+      )
       .select(db.raw(`${NAME_SQL} as name`), db.raw(`${STATE_SQL} as state`))
-      .orderBy('r.id', 'asc')
+      .orderBy([
+        { column: 'r.created_at', order: sortOrder, nulls: 'last' },
+        { column: 'r.id', order: sortOrder },
+      ])
       .paginate(options.page, options.perPage),
     recipientQuery(activityId)
       .select(db.raw(`${STATE_SQL} as state`))
