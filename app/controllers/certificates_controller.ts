@@ -14,7 +14,9 @@ import {
   getRecipientNames,
   prepareCertificateIssuance,
 } from '#services/certificate_workflow_service'
+import { lookupCertificatesValidator } from '#validators/certificate_validator'
 import type { HttpContext } from '@adonisjs/core/http'
+import logger from '@adonisjs/core/services/logger'
 import vine, { errors } from '@vinejs/vine'
 
 const generateCertificatesValidator = vine.compile(
@@ -164,7 +166,7 @@ export default class CertificatesController {
     }
   }
 
-  async index({ request, response }: HttpContext) {
+  async index({ request, response, requestId }: HttpContext): Promise<void> {
     try {
       const rawActivityId = request.qs().activity_id
       const activityId = rawActivityId === undefined ? undefined : Number(rawActivityId)
@@ -183,7 +185,28 @@ export default class CertificatesController {
       })
 
       return response.ok({ message: 'GET_DATA_SUCCESS', data: certificates })
-    } catch {
+    } catch (error) {
+      if (error instanceof errors.E_VALIDATION_ERROR) return validationError(response, error)
+      logger.error({ err: error, request_id: requestId }, 'Failed to list issued certificates')
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
+    }
+  }
+
+  async lookup({ request, response, requestId }: HttpContext): Promise<void> {
+    try {
+      const payload = await request.validateUsing(lookupCertificatesValidator)
+      const registrationIds = [...new Set(payload.registration_ids)]
+      // One certificate per registration: a bounded lookup fits in one page.
+      const certificates = await listIssuedCertificates({
+        activityId: payload.activity_id,
+        registrationIds,
+        page: 1,
+        perPage: registrationIds.length,
+      })
+      return response.ok({ message: 'GET_DATA_SUCCESS', data: certificates.data })
+    } catch (error) {
+      if (error instanceof errors.E_VALIDATION_ERROR) return validationError(response, error)
+      logger.error({ err: error, request_id: requestId }, 'Failed to look up issued certificates')
       return response.internalServerError({ message: 'GENERAL_ERROR' })
     }
   }

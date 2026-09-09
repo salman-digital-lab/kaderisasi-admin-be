@@ -19,6 +19,14 @@ export const http = defineConfig({
   generateRequestId: false,
   allowMethodSpoofing: false,
 
+  qs: {
+    parse: {
+      // Certificate filters accept up to 200 registration IDs. Beyond the
+      // default of 20, qs converts arrays to objects and validation fails.
+      arrayLimit: 200,
+    },
+  },
+
   /**
    * Enabling async local storage will let you access HTTP context
    * from anywhere inside your application.

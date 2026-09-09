@@ -510,6 +510,9 @@ router
           .get('', [CertificatesController, 'index'])
           .use(middleware.permission({ permission: 'certificate.read' }))
         router
+          .post('/lookup', [CertificatesController, 'lookup'])
+          .use(middleware.permission({ permission: 'certificate.read' }))
+        router
           .get('/:id', [CertificatesController, 'show'])
           .use(middleware.permission({ permission: 'certificate.read' }))
         router
