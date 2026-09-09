@@ -1,4 +1,11 @@
 import { defineConfig } from '@adonisjs/cors'
+import env from '#start/env'
+
+const allowedOrigins = env
+  .get('ADMIN_CORS_ORIGINS', 'http://localhost:3005')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
 
 /**
  * Configuration options to tweak the CORS policy. The following
@@ -8,8 +15,8 @@ import { defineConfig } from '@adonisjs/cors'
  */
 const corsConfig = defineConfig({
   enabled: true,
-  origin: '*',
-  methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
+  origin: (origin) => !origin || allowedOrigins.includes(origin),
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
   headers: true,
   exposeHeaders: [],
   credentials: true,

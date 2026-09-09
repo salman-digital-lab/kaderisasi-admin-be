@@ -5,7 +5,6 @@ import db from '@adonisjs/lucid/services/db'
 
 import Activity, { type AdditionalConfig } from '#models/activity'
 import CertificateTemplate from '#models/certificate_template'
-import { hasCertificatePermission } from '#middleware/certificate_permission_middleware'
 import { getCertificateTemplateReadiness } from '#services/certificate_template_readiness_service'
 import { generateUniqueActivitySlug } from '#services/activity_slug_service'
 import { InvalidImageError, storeOptimizedImage } from '#services/image_upload_service'
@@ -279,7 +278,7 @@ export default class ActivitiesController {
     }
   }
 
-  async store({ request, response, auth }: HttpContext) {
+  async store({ request, response, authorization }: HttpContext) {
     const payload = await activityValidator.validate(request.all())
     try {
       const certificateTemplateId =
@@ -288,10 +287,7 @@ export default class ActivitiesController {
         null
 
       if (certificateTemplateId !== null) {
-        if (
-          !auth.user ||
-          !hasCertificatePermission(auth.user.role, 'certificate.template.manage')
-        ) {
+        if (!authorization?.permissions.includes('certificate.template.manage')) {
           return response.forbidden({ message: 'FORBIDDEN' })
         }
 
@@ -353,7 +349,7 @@ export default class ActivitiesController {
     }
   }
 
-  async update({ params, request, response, auth }: HttpContext) {
+  async update({ params, request, response, authorization }: HttpContext) {
     const payload = await updateActivityValidator.validate(request.all())
     try {
       const id: number = params.id
@@ -367,10 +363,7 @@ export default class ActivitiesController {
           : nestedTemplateId
 
       if (assignmentProvided && requestedTemplateId !== activityData.certificateTemplateId) {
-        if (
-          !auth.user ||
-          !hasCertificatePermission(auth.user.role, 'certificate.template.manage')
-        ) {
+        if (!authorization?.permissions.includes('certificate.template.manage')) {
           return response.forbidden({ message: 'FORBIDDEN' })
         }
 

@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'
-import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { BaseModel, beforeSave, column } from '@adonisjs/lucid/orm'
 import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
@@ -17,13 +17,16 @@ export default class AdminUser extends compose(BaseModel, AuthFinder) {
   declare email: string
 
   @column({ serializeAs: null })
-  declare password: string
+  declare password: string | null
+
+  @column()
+  declare normalizedEmail: string
 
   @column()
   declare displayName: string
 
   @column()
-  declare role: number
+  declare roleCode: string | null
 
   @column()
   declare isActive: boolean
@@ -33,4 +36,12 @@ export default class AdminUser extends compose(BaseModel, AuthFinder) {
 
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime | null
+
+  @beforeSave()
+  static normalizeEmail(user: AdminUser): void {
+    if (user.$dirty.email) {
+      user.email = user.email.trim().toLowerCase()
+      user.normalizedEmail = user.email
+    }
+  }
 }

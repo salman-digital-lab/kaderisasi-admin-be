@@ -2,6 +2,9 @@ import router from '@adonisjs/core/services/router'
 import { middleware } from '#start/kernel'
 
 const AdminusersController = () => import('#controllers/adminusers_controller')
+const RbacRolesController = () => import('#controllers/rbac_roles_controller')
+const RbacPermissionsController = () => import('#controllers/rbac_permissions_controller')
+const AccessRequestsController = () => import('#controllers/access_requests_controller')
 const ProfilesController = () => import('#controllers/profiles_controller')
 const ActivitiesController = () => import('#controllers/activities_controller')
 const ActivityRegistrationsController = () =>
@@ -27,21 +30,73 @@ router
     router
       .group(() => {
         router.post('login', [AuthController, 'login'])
-        router.put('logout', [AuthController, 'logout']).use(middleware.auth())
+        router.post('google', [AuthController, 'google'])
+        router.post('refresh', [AuthController, 'refresh'])
+        router.post('session/migrate', [AuthController, 'migrate']).use(middleware.auth())
+        router.get('me', [AuthController, 'me']).use(middleware.auth())
+        router.post('logout', [AuthController, 'logout'])
+        router.put('logout', [AuthController, 'logout'])
       })
       .prefix('auth')
+      .use(middleware.trustedOrigin())
 
     router
       .group(() => {
-        router.get('', [AdminusersController, 'index'])
-        router.get(':id', [AdminusersController, 'show'])
-        router.post('', [AdminusersController, 'create'])
-        router.put(':id', [AdminusersController, 'update'])
-        router.put(':id/password', [AdminusersController, 'editPassword'])
+        router
+          .get('', [AdminusersController, 'index'])
+          .use(middleware.permission({ permission: 'admin_users.read' }))
+        router
+          .get(':id', [AdminusersController, 'show'])
+          .use(middleware.permission({ permission: 'admin_users.read' }))
+        router
+          .post('', [AdminusersController, 'create'])
+          .use(middleware.permission({ permission: 'admin_users.manage' }))
+        router
+          .put(':id', [AdminusersController, 'update'])
+          .use(middleware.permission({ permission: 'admin_users.manage' }))
+        router
+          .put(':id/password', [AdminusersController, 'editPassword'])
+          .use(middleware.permission({ permission: 'admin_users.manage' }))
       })
       .prefix('admin-users')
       .use(middleware.auth())
-      .use(middleware.adminPermission({ permission: 'akunadmin' }))
+
+    router
+      .group(() => {
+        router
+          .get('permissions', [RbacPermissionsController, 'index'])
+          .use(middleware.permission({ permission: 'rbac.read' }))
+        router.get('requestable-targets', [RbacPermissionsController, 'requestableTargets'])
+        router
+          .get('roles', [RbacRolesController, 'index'])
+          .use(middleware.permission({ permission: 'rbac.read' }))
+        router
+          .get('roles/:code', [RbacRolesController, 'show'])
+          .use(middleware.permission({ permission: 'rbac.read' }))
+      })
+      .prefix('rbac')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.get('', [AccessRequestsController, 'ownIndex'])
+        router.post('', [AccessRequestsController, 'store'])
+        router.get(':id', [AccessRequestsController, 'ownShow'])
+        router.post(':id/cancel', [AccessRequestsController, 'cancel'])
+      })
+      .prefix('access-requests')
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.get('', [AccessRequestsController, 'reviewIndex'])
+        router.get(':id', [AccessRequestsController, 'reviewShow'])
+        router.post(':id/approve', [AccessRequestsController, 'approve'])
+        router.post(':id/reject', [AccessRequestsController, 'reject'])
+      })
+      .prefix('tickets/review')
+      .use(middleware.auth())
+      .use(middleware.permission({ permission: 'tickets.review' }))
 
     router
       .group(() => {
@@ -51,75 +106,143 @@ router
       })
       .prefix('dashboard')
       .use(middleware.auth())
+      .use(middleware.permission({ permission: 'dashboard.read' }))
 
     router
       .group(() => {
-        router.post('', [UniversitiesController, 'store']).use(middleware.auth())
-        router.put('/:id', [UniversitiesController, 'update']).use(middleware.auth())
-        router.get('/:id', [UniversitiesController, 'show'])
         router.get('', [UniversitiesController, 'index'])
-        router.delete(':id', [UniversitiesController, 'delete'])
+        router.get('/:id', [UniversitiesController, 'show'])
+        router
+          .post('', [UniversitiesController, 'store'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
+        router
+          .put('/:id', [UniversitiesController, 'update'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
+        router
+          .delete(':id', [UniversitiesController, 'delete'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
       })
       .prefix('universities')
 
     router
       .group(() => {
-        router.put('/:id', [ProfilesController, 'update'])
-        router.put('/:id/regional-assignment', [ProfilesController, 'updateRegionalAssignment'])
-        router.put('auth/:id', [AuthController, 'updateMember'])
-        router.get('/:id', [ProfilesController, 'show'])
-        router.get('user/:id', [ProfilesController, 'showByUserId'])
-        router.get('', [ProfilesController, 'index'])
-        router.delete(':id', [ProfilesController, 'delete'])
+        router
+          .get('user/:id', [ProfilesController, 'showByUserId'])
+          .use(middleware.permission({ permission: 'members.read' }))
+        router
+          .get('/:id', [ProfilesController, 'show'])
+          .use(middleware.permission({ permission: 'members.read' }))
+        router
+          .get('', [ProfilesController, 'index'])
+          .use(middleware.permission({ permission: 'members.read' }))
+        router
+          .put('/:id', [ProfilesController, 'update'])
+          .use(middleware.permission({ permission: 'members.manage' }))
+        router
+          .put('/:id/regional-assignment', [ProfilesController, 'updateRegionalAssignment'])
+          .use(middleware.permission({ permission: 'members.manage' }))
+        router
+          .put('auth/:id', [AuthController, 'updateMember'])
+          .use(middleware.permission({ permission: 'members.credentials.manage' }))
+        router
+          .delete(':id', [ProfilesController, 'delete'])
+          .use(middleware.permission({ permission: 'members.manage' }))
       })
       .prefix('profiles')
       .use(middleware.auth())
 
     router
       .group(() => {
-        router.post('', [MembersController, 'store'])
-        router.post(':id/generate-account', [MembersController, 'generateAccount'])
+        router
+          .post('', [MembersController, 'store'])
+          .use(middleware.permission({ permission: 'members.manage' }))
+        router
+          .post(':id/generate-account', [MembersController, 'generateAccount'])
+          .use(middleware.permission({ permission: 'members.credentials.manage' }))
       })
       .prefix('members')
       .use(middleware.auth())
 
     router
       .group(() => {
-        router.put('/:id', [ActivitiesController, 'update'])
-        router.get('/:id', [ActivitiesController, 'show'])
-        router.get('', [ActivitiesController, 'index'])
-        router.post('', [ActivitiesController, 'store'])
-        router.post(':id/images', [ActivitiesController, 'uploadImage'])
-        router.put(':id/delete-image', [ActivitiesController, 'deleteImage'])
-        router.put(':id/reorder-images', [ActivitiesController, 'reorderImages'])
-        router.get(':id/registrations', [ActivityRegistrationsController, 'index'])
-        router.get(':id/registrations/statistics', [ActivityRegistrationsController, 'statistics'])
-        router.get(':id/registrations-export/', [ActivityRegistrationsController, 'export'])
-        router.put(':id/registrations/status-by-email', [
-          ActivityRegistrationsController,
-          'updateStatusByListOfEmail',
-        ])
-        router.put(':id/registrations', [ActivityRegistrationsController, 'updateStatusBulk'])
-        router.post(':id/registrations', [ActivityRegistrationsController, 'store'])
+        router
+          .get('', [ActivitiesController, 'index'])
+          .use(middleware.permission({ permission: 'activities.read' }))
+        router
+          .get('/:id', [ActivitiesController, 'show'])
+          .use(middleware.permission({ permission: 'activities.read' }))
+        router
+          .post('', [ActivitiesController, 'store'])
+          .use(middleware.permission({ permission: 'activities.manage' }))
+        router
+          .put('/:id', [ActivitiesController, 'update'])
+          .use(middleware.permission({ permission: 'activities.manage' }))
+        router
+          .post(':id/images', [ActivitiesController, 'uploadImage'])
+          .use(middleware.permission({ permission: 'activities.manage' }))
+        router
+          .put(':id/delete-image', [ActivitiesController, 'deleteImage'])
+          .use(middleware.permission({ permission: 'activities.manage' }))
+        router
+          .put(':id/reorder-images', [ActivitiesController, 'reorderImages'])
+          .use(middleware.permission({ permission: 'activities.manage' }))
+        router
+          .get(':id/registrations', [ActivityRegistrationsController, 'index'])
+          .use(middleware.permission({ permission: 'activity_registrations.read' }))
+        router
+          .get(':id/registrations/statistics', [ActivityRegistrationsController, 'statistics'])
+          .use(middleware.permission({ permission: 'activity_registrations.read' }))
+        router
+          .get(':id/registrations-export/', [ActivityRegistrationsController, 'export'])
+          .use(middleware.permission({ permission: 'activity_registrations.export' }))
+        router
+          .put(':id/registrations/status-by-email', [
+            ActivityRegistrationsController,
+            'updateStatusByListOfEmail',
+          ])
+          .use(middleware.permission({ permission: 'activity_registrations.manage' }))
+        router
+          .put(':id/registrations', [ActivityRegistrationsController, 'updateStatusBulk'])
+          .use(middleware.permission({ permission: 'activity_registrations.manage' }))
+        router
+          .post(':id/registrations', [ActivityRegistrationsController, 'store'])
+          .use(middleware.permission({ permission: 'activity_registrations.manage' }))
       })
       .prefix('activities')
       .use(middleware.auth())
 
     router
       .group(() => {
-        router.put('', [ActivityRegistrationsController, 'updateStatus'])
-        router.get('/:id', [ActivityRegistrationsController, 'show'])
-        router.get('/user/:id', [ActivityRegistrationsController, 'getActivityByUserId'])
-        router.delete(':id', [ActivityRegistrationsController, 'delete'])
+        router
+          .get('/user/:id', [ActivityRegistrationsController, 'getActivityByUserId'])
+          .use(middleware.permission({ permission: 'activity_registrations.read' }))
+        router
+          .get('/:id', [ActivityRegistrationsController, 'show'])
+          .use(middleware.permission({ permission: 'activity_registrations.read' }))
+        router
+          .put('', [ActivityRegistrationsController, 'updateStatus'])
+          .use(middleware.permission({ permission: 'activity_registrations.manage' }))
+        router
+          .delete(':id', [ActivityRegistrationsController, 'delete'])
+          .use(middleware.permission({ permission: 'activity_registrations.manage' }))
       })
       .prefix('activity-registrations')
       .use(middleware.auth())
 
     router
       .group(() => {
-        router.put('/:id', [RuangCurhatController, 'update'])
-        router.get('/:id', [RuangCurhatController, 'show'])
-        router.get('', [RuangCurhatController, 'index'])
+        router
+          .get('', [RuangCurhatController, 'index'])
+          .use(middleware.permission({ permission: 'counseling.read' }))
+        router
+          .get('/:id', [RuangCurhatController, 'show'])
+          .use(middleware.permission({ permission: 'counseling.read' }))
+        router
+          .put('/:id', [RuangCurhatController, 'update'])
+          .use(middleware.permission({ permission: 'counseling.manage' }))
       })
       .prefix('ruang-curhat')
       .use(middleware.auth())
@@ -127,11 +250,20 @@ router
     router
       .group(() => {
         router.get('', [ProvincesController, 'index'])
-        router.get(':id', [ProvincesController, 'show'])
         router.get(':id/cities', [CitiesController, 'getByProvinceId'])
-        router.post('', [ProvincesController, 'store']).use(middleware.auth())
-        router.put(':id', [ProvincesController, 'update']).use(middleware.auth())
-        router.delete(':id', [ProvincesController, 'delete']).use(middleware.auth())
+        router.get(':id', [ProvincesController, 'show'])
+        router
+          .post('', [ProvincesController, 'store'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
+        router
+          .put(':id', [ProvincesController, 'update'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
+        router
+          .delete(':id', [ProvincesController, 'delete'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
       })
       .prefix('provinces')
 
@@ -139,9 +271,18 @@ router
       .group(() => {
         router.get('', [CitiesController, 'index'])
         router.get(':id', [CitiesController, 'show'])
-        router.post('', [CitiesController, 'store']).use(middleware.auth())
-        router.put(':id', [CitiesController, 'update']).use(middleware.auth())
-        router.delete(':id', [CitiesController, 'delete']).use(middleware.auth())
+        router
+          .post('', [CitiesController, 'store'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
+        router
+          .put(':id', [CitiesController, 'update'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
+        router
+          .delete(':id', [CitiesController, 'delete'])
+          .use(middleware.auth())
+          .use(middleware.permission({ permission: 'reference_data.manage' }))
       })
       .prefix('cities')
 
@@ -149,11 +290,21 @@ router
 
     router
       .group(() => {
-        router.get('', [LeaderboardsController, 'index'])
-        router.get('export', [LeaderboardsController, 'export'])
-        router.get(':id', [LeaderboardsController, 'show'])
-        router.put(':id', [LeaderboardsController, 'update'])
-        router.put(':id/approve-reject', [LeaderboardsController, 'approveReject'])
+        router
+          .get('export', [LeaderboardsController, 'export'])
+          .use(middleware.permission({ permission: 'achievements.export' }))
+        router
+          .get('', [LeaderboardsController, 'index'])
+          .use(middleware.permission({ permission: 'achievements.read' }))
+        router
+          .get(':id', [LeaderboardsController, 'show'])
+          .use(middleware.permission({ permission: 'achievements.read' }))
+        router
+          .put(':id', [LeaderboardsController, 'update'])
+          .use(middleware.permission({ permission: 'achievements.review' }))
+        router
+          .put(':id/approve-reject', [LeaderboardsController, 'approveReject'])
+          .use(middleware.permission({ permission: 'achievements.review' }))
       })
       .prefix('achievements')
       .use(middleware.auth())
@@ -165,97 +316,163 @@ router
       })
       .prefix('leaderboards')
       .use(middleware.auth())
+      .use(middleware.permission({ permission: 'leaderboards.read' }))
 
     router
       .group(() => {
-        router.get('', [ClubsController, 'index'])
-        router.get(':id', [ClubsController, 'show'])
-        router.post('', [ClubsController, 'store'])
-        router.put(':id', [ClubsController, 'update'])
-        router.post(':id/logo', [ClubsController, 'uploadLogo'])
-        router.post(':id/media/image', [ClubsController, 'uploadImageMedia'])
-        router.post(':id/media/youtube', [ClubsController, 'addYoutubeMedia'])
-        router.put(':id/delete-media', [ClubsController, 'deleteMedia'])
-        router.put(':id/registration-info', [ClubsController, 'updateRegistrationInfo'])
-
-        // Club registrations management
-        router.get(':id/members', [ClubRegistrationsController, 'members'])
-        router.get(':id/registrations', [ClubRegistrationsController, 'index'])
-        router.post(':id/registrations', [ClubRegistrationsController, 'store'])
-        router.get(':id/registrations/export', [ClubRegistrationsController, 'export'])
-
-        // Club role assignments
-        router.get(':id/member-roles', [ClubMemberRolesController, 'index'])
-        router.get(':id/member-role-suggestions', [ClubMemberRolesController, 'suggestions'])
-        router.post(':id/member-roles', [ClubMemberRolesController, 'store'])
+        router
+          .get('', [ClubsController, 'index'])
+          .use(middleware.permission({ permission: 'clubs.read' }))
+        router
+          .get(':id', [ClubsController, 'show'])
+          .use(middleware.permission({ permission: 'clubs.read' }))
+        router
+          .post('', [ClubsController, 'store'])
+          .use(middleware.permission({ permission: 'clubs.manage' }))
+        router
+          .put(':id', [ClubsController, 'update'])
+          .use(middleware.permission({ permission: 'clubs.manage' }))
+        router
+          .post(':id/logo', [ClubsController, 'uploadLogo'])
+          .use(middleware.permission({ permission: 'clubs.manage' }))
+        router
+          .post(':id/media/image', [ClubsController, 'uploadImageMedia'])
+          .use(middleware.permission({ permission: 'clubs.manage' }))
+        router
+          .post(':id/media/youtube', [ClubsController, 'addYoutubeMedia'])
+          .use(middleware.permission({ permission: 'clubs.manage' }))
+        router
+          .put(':id/delete-media', [ClubsController, 'deleteMedia'])
+          .use(middleware.permission({ permission: 'clubs.manage' }))
+        router
+          .put(':id/registration-info', [ClubsController, 'updateRegistrationInfo'])
+          .use(middleware.permission({ permission: 'clubs.manage' }))
+        router
+          .get(':id/members', [ClubRegistrationsController, 'members'])
+          .use(middleware.permission({ permission: 'club_registrations.read' }))
+        router
+          .get(':id/registrations', [ClubRegistrationsController, 'index'])
+          .use(middleware.permission({ permission: 'club_registrations.read' }))
+        router
+          .post(':id/registrations', [ClubRegistrationsController, 'store'])
+          .use(middleware.permission({ permission: 'club_registrations.manage' }))
+        router
+          .get(':id/registrations/export', [ClubRegistrationsController, 'export'])
+          .use(middleware.permission({ permission: 'club_registrations.export' }))
+        router
+          .get(':id/member-roles', [ClubMemberRolesController, 'index'])
+          .use(middleware.permission({ permission: 'club_registrations.read' }))
+        router
+          .get(':id/member-role-suggestions', [ClubMemberRolesController, 'suggestions'])
+          .use(middleware.permission({ permission: 'club_registrations.read' }))
+        router
+          .post(':id/member-roles', [ClubMemberRolesController, 'store'])
+          .use(middleware.permission({ permission: 'club_registrations.manage' }))
       })
       .prefix('clubs')
       .use(middleware.auth())
-      .use(middleware.adminPermission({ permission: 'club' }))
 
     router
       .group(() => {
-        router.put('member-roles/:id', [ClubMemberRolesController, 'update'])
-        router.delete('member-roles/:id', [ClubMemberRolesController, 'destroy'])
-        router.put('bulk-update', [ClubRegistrationsController, 'bulkUpdate'])
-        router.get(':id', [ClubRegistrationsController, 'show'])
-        router.put(':id', [ClubRegistrationsController, 'update'])
-        router.delete(':id', [ClubRegistrationsController, 'delete'])
+        router
+          .get(':id', [ClubRegistrationsController, 'show'])
+          .use(middleware.permission({ permission: 'club_registrations.read' }))
+        router
+          .put('member-roles/:id', [ClubMemberRolesController, 'update'])
+          .use(middleware.permission({ permission: 'club_registrations.manage' }))
+        router
+          .delete('member-roles/:id', [ClubMemberRolesController, 'destroy'])
+          .use(middleware.permission({ permission: 'club_registrations.manage' }))
+        router
+          .put('bulk-update', [ClubRegistrationsController, 'bulkUpdate'])
+          .use(middleware.permission({ permission: 'club_registrations.manage' }))
+        router
+          .put(':id', [ClubRegistrationsController, 'update'])
+          .use(middleware.permission({ permission: 'club_registrations.manage' }))
+        router
+          .delete(':id', [ClubRegistrationsController, 'delete'])
+          .use(middleware.permission({ permission: 'club_registrations.manage' }))
       })
       .prefix('club-registrations')
       .use(middleware.auth())
-      .use(middleware.adminPermission({ permission: 'club' }))
 
     router
       .group(() => {
-        router.get('', [CustomFormsController, 'index'])
-        router.get('by-feature', [CustomFormsController, 'getByFeature'])
-        router.get('unattached', [CustomFormsController, 'getUnattachedForms'])
-        router.get('available-activities', [CustomFormsController, 'getAvailableActivities'])
-        router.get('available-clubs', [CustomFormsController, 'getAvailableClubs'])
-        router.get(':id', [CustomFormsController, 'show'])
-        router.post('', [CustomFormsController, 'store'])
-        router.put(':id', [CustomFormsController, 'update'])
-        router.put(':id/attach-club', [CustomFormsController, 'attachToClub'])
-        router.put(':id/detach-club', [CustomFormsController, 'detachFromClub'])
-        router.put(':id/attach-activity', [CustomFormsController, 'attachToActivity'])
-        router.put(':id/detach-activity', [CustomFormsController, 'detachFromActivity'])
-        router.delete(':id', [CustomFormsController, 'destroy'])
-        router.put(':id/toggle-active', [CustomFormsController, 'toggleActive'])
+        router
+          .get('', [CustomFormsController, 'index'])
+          .use(middleware.permission({ permission: 'custom_forms.read' }))
+        router
+          .get('by-feature', [CustomFormsController, 'getByFeature'])
+          .use(middleware.permission({ permission: 'custom_forms.read' }))
+        router
+          .get('unattached', [CustomFormsController, 'getUnattachedForms'])
+          .use(middleware.permission({ permission: 'custom_forms.read' }))
+        router
+          .get('available-activities', [CustomFormsController, 'getAvailableActivities'])
+          .use(middleware.permission({ permission: 'custom_forms.read' }))
+        router
+          .get('available-clubs', [CustomFormsController, 'getAvailableClubs'])
+          .use(middleware.permission({ permission: 'custom_forms.read' }))
+        router
+          .get(':id', [CustomFormsController, 'show'])
+          .use(middleware.permission({ permission: 'custom_forms.read' }))
+        router
+          .post('', [CustomFormsController, 'store'])
+          .use(middleware.permission({ permission: 'custom_forms.manage' }))
+        router
+          .put(':id', [CustomFormsController, 'update'])
+          .use(middleware.permission({ permission: 'custom_forms.manage' }))
+        router
+          .put(':id/attach-club', [CustomFormsController, 'attachToClub'])
+          .use(middleware.permission({ permission: 'custom_forms.manage' }))
+        router
+          .put(':id/detach-club', [CustomFormsController, 'detachFromClub'])
+          .use(middleware.permission({ permission: 'custom_forms.manage' }))
+        router
+          .put(':id/attach-activity', [CustomFormsController, 'attachToActivity'])
+          .use(middleware.permission({ permission: 'custom_forms.manage' }))
+        router
+          .put(':id/detach-activity', [CustomFormsController, 'detachFromActivity'])
+          .use(middleware.permission({ permission: 'custom_forms.manage' }))
+        router
+          .delete(':id', [CustomFormsController, 'destroy'])
+          .use(middleware.permission({ permission: 'custom_forms.manage' }))
+        router
+          .put(':id/toggle-active', [CustomFormsController, 'toggleActive'])
+          .use(middleware.permission({ permission: 'custom_forms.manage' }))
       })
       .prefix('custom-forms')
       .use(middleware.auth())
-      .use(middleware.adminPermission({ permission: 'formkustom' }))
 
     router
       .group(() => {
         router
           .get('', [CertificateTemplatesController, 'index'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.read' }))
+          .use(middleware.permission({ permission: 'certificate.template.read' }))
         router
           .get(':id', [CertificateTemplatesController, 'show'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.read' }))
+          .use(middleware.permission({ permission: 'certificate.template.read' }))
         router
           .post('', [CertificateTemplatesController, 'store'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+          .use(middleware.permission({ permission: 'certificate.template.manage' }))
         router
           .put(':id', [CertificateTemplatesController, 'update'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+          .use(middleware.permission({ permission: 'certificate.template.manage' }))
         router
           .post(':id/publish', [CertificateTemplatesController, 'publish'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+          .use(middleware.permission({ permission: 'certificate.template.manage' }))
         router
           .post(':id/archive', [CertificateTemplatesController, 'archive'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+          .use(middleware.permission({ permission: 'certificate.template.manage' }))
         router
           .delete(':id', [CertificateTemplatesController, 'destroy'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+          .use(middleware.permission({ permission: 'certificate.template.manage' }))
         router
           .post(':id/background', [CertificateTemplatesController, 'uploadBackground'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+          .use(middleware.permission({ permission: 'certificate.template.manage' }))
         router
           .post(':id/assets', [CertificateTemplatesController, 'uploadAsset'])
-          .use(middleware.certificatePermission({ permission: 'certificate.template.manage' }))
+          .use(middleware.permission({ permission: 'certificate.template.manage' }))
       })
       .prefix('certificate-templates')
       .use(middleware.auth())
@@ -263,32 +480,32 @@ router
     router
       .group(() => {
         router
-          .get('', [CertificatesController, 'index'])
-          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
-        router
           .get('/code/:code', [CertificatesController, 'showByCode'])
-          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+          .use(middleware.permission({ permission: 'certificate.read' }))
         router
           .get('/verify/:code', [CertificatesController, 'verify'])
-          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+          .use(middleware.permission({ permission: 'certificate.read' }))
         router
           .post('/issue-single', [CertificatesController, 'issueSingle'])
-          .use(middleware.certificatePermission({ permission: 'certificate.issue' }))
+          .use(middleware.permission({ permission: 'certificate.issue' }))
         router
           .post('/issue-bulk', [CertificatesController, 'issueBulk'])
-          .use(middleware.certificatePermission({ permission: 'certificate.issue' }))
+          .use(middleware.permission({ permission: 'certificate.issue' }))
         router
           .post('/generate', [CertificatesController, 'generate'])
-          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+          .use(middleware.permission({ permission: 'certificate.read' }))
         router
           .post('/generate-single', [CertificatesController, 'generateSingle'])
-          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+          .use(middleware.permission({ permission: 'certificate.read' }))
+        router
+          .get('', [CertificatesController, 'index'])
+          .use(middleware.permission({ permission: 'certificate.read' }))
         router
           .get('/:id', [CertificatesController, 'show'])
-          .use(middleware.certificatePermission({ permission: 'certificate.read' }))
+          .use(middleware.permission({ permission: 'certificate.read' }))
         router
           .post('/:id/revoke', [CertificatesController, 'revoke'])
-          .use(middleware.certificatePermission({ permission: 'certificate.revoke' }))
+          .use(middleware.permission({ permission: 'certificate.revoke' }))
       })
       .prefix('certificates')
       .use(middleware.auth())

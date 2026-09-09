@@ -14,7 +14,12 @@ const authConfig = defineConfig({
   default: 'jwt',
   guards: {
     jwt: jwtGuard({
-      tokenExpiresIn: '7d',
+      tokenExpiresIn: '15m',
+      // The JWT package checks cookies even with useCookies disabled and matches
+      // cookie-name suffixes. Avoid its generic 'token' name, which can select
+      // stale cookies from other apps sharing localhost instead of our header.
+      tokenName: 'admin_access_jwt',
+      useCookies: false,
       provider: sessionUserProvider({
         model: () => import('#models/admin_user'),
       }),

@@ -15,6 +15,7 @@ export default defineConfig({
     () => import('@adonisjs/lucid/commands'),
     () => import('@adonisjs/mail/commands'),
     () => import('adonisjs-scheduler/commands'),
+    () => import('@adonisjs/bouncer/commands'),
   ],
 
   /*
@@ -45,6 +46,7 @@ export default defineConfig({
       environment: ['console'],
     },
     () => import('@adonisjs/drive/drive_provider'),
+    () => import('@adonisjs/bouncer/bouncer_provider'),
   ],
 
   /*

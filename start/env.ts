@@ -49,4 +49,13 @@ export default await Env.create(new URL('../', import.meta.url), {
   DRIVE_ENDPOINT: Env.schema.string(),
   DRIVE_BUCKET: Env.schema.string(),
   DRIVE_REGION: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for configuring admin access and authentication
+  |----------------------------------------------------------
+  */
+  ADMIN_BOOTSTRAP_EMAILS: Env.schema.string.optional(),
+  ADMIN_CORS_ORIGINS: Env.schema.string.optional(),
+  GOOGLE_CLIENT_ID: Env.schema.string.optional(),
 })

@@ -37,6 +37,7 @@ router.use([
   () => import('@adonisjs/core/bodyparser_middleware'),
   () => import('@adonisjs/auth/initialize_auth_middleware'),
   () => import('#middleware/logger_middleware'),
+  () => import('#middleware/initialize_bouncer_middleware'),
 ])
 
 /**
@@ -46,6 +47,6 @@ router.use([
 export const middleware = router.named({
   guest: () => import('#middleware/guest_middleware'),
   auth: () => import('#middleware/auth_middleware'),
-  adminPermission: () => import('#middleware/admin_permission_middleware'),
-  certificatePermission: () => import('#middleware/certificate_permission_middleware'),
+  permission: () => import('#middleware/permission_middleware'),
+  trustedOrigin: () => import('#middleware/trusted_origin_middleware'),
 })

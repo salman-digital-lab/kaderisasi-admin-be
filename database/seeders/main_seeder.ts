@@ -1,7 +1,7 @@
 import { BaseSeeder } from '@adonisjs/lucid/seeders'
 import csv from 'csvtojson'
 
-import { RealAdminUserFactory } from '#database/factories/admin_user_factory'
+import { AdminUserFactory } from '#database/factories/admin_user_factory'
 
 import Province from '#models/province'
 import City from '#models/city'
@@ -54,8 +54,8 @@ export default class extends BaseSeeder {
         isActive: true,
       }))
     )
-    // Real Data Seeder
-    await RealAdminUserFactory.create()
+    // Demo account without operational access
+    await AdminUserFactory.create()
 
     await PublicUserFactory.createMany(10)
 
