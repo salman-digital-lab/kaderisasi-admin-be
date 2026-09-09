@@ -1,5 +1,5 @@
-import router from '@adonisjs/core/services/router'
 import { middleware } from '#start/kernel'
+import router from '@adonisjs/core/services/router'
 
 const AdminusersController = () => import('#controllers/adminusers_controller')
 const RbacRolesController = () => import('#controllers/rbac_roles_controller')
@@ -459,6 +459,9 @@ router
           .put(':id', [CertificateTemplatesController, 'update'])
           .use(middleware.permission({ permission: 'certificate.template.manage' }))
         router
+          .post(':id/duplicate', [CertificateTemplatesController, 'duplicate'])
+          .use(middleware.permission({ permission: 'certificate.template.manage' }))
+        router
           .post(':id/publish', [CertificateTemplatesController, 'publish'])
           .use(middleware.permission({ permission: 'certificate.template.manage' }))
         router
@@ -485,6 +488,12 @@ router
         router
           .get('/verify/:code', [CertificatesController, 'verify'])
           .use(middleware.permission({ permission: 'certificate.read' }))
+        router
+          .get('/activities/:activityId/recipients', [CertificatesController, 'recipients'])
+          .use(middleware.permission({ permission: 'certificate.read' }))
+        router
+          .post('/prepare-issuance', [CertificatesController, 'prepare'])
+          .use(middleware.permission({ permission: 'certificate.issue' }))
         router
           .post('/issue-single', [CertificatesController, 'issueSingle'])
           .use(middleware.permission({ permission: 'certificate.issue' }))

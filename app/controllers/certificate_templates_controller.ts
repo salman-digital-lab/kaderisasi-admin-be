@@ -1,23 +1,10 @@
-import { randomUUID } from 'node:crypto'
-import { DateTime } from 'luxon'
-import type { HttpContext } from '@adonisjs/core/http'
-import logger from '@adonisjs/core/services/logger'
-import drive from '@adonisjs/drive/services/main'
-import db from '@adonisjs/lucid/services/db'
-import { errors } from '@vinejs/vine'
 import Activity from '#models/activity'
 import CertificateTemplate, {
   type CertificateTemplateLifecycle,
   type TemplateData,
 } from '#models/certificate_template'
 import IssuedCertificate from '#models/issued_certificate'
-import {
-  certificateAssetValidator,
-  certificateTemplateValidator,
-  mutateCertificateTemplateLifecycleValidator,
-  updateCertificateTemplateValidator,
-  backgroundImageValidator,
-} from '#validators/certificate_template_validator'
+import { duplicateCertificateTemplate } from '#services/certificate_template_copy_service'
 import {
   getCertificateTemplateReadiness,
   lifecycleData,
@@ -27,6 +14,20 @@ import {
   nextCertificateTemplateVersion,
 } from '#services/certificate_template_version_service'
 import { InvalidImageError, storeOptimizedImage } from '#services/image_upload_service'
+import {
+  backgroundImageValidator,
+  certificateAssetValidator,
+  certificateTemplateValidator,
+  mutateCertificateTemplateLifecycleValidator,
+  updateCertificateTemplateValidator,
+} from '#validators/certificate_template_validator'
+import type { HttpContext } from '@adonisjs/core/http'
+import logger from '@adonisjs/core/services/logger'
+import drive from '@adonisjs/drive/services/main'
+import db from '@adonisjs/lucid/services/db'
+import { errors } from '@vinejs/vine'
+import { DateTime } from 'luxon'
+import { randomUUID } from 'node:crypto'
 
 const DEFAULT_TEMPLATE_DATA: TemplateData = {
   backgroundUrl: null,
@@ -137,15 +138,47 @@ export default class CertificateTemplatesController {
         data: {
           ...serialized,
           data: models.map((template) =>
-            serializeTemplate(template, {
-              activityUsageCount: counts.activityCounts.get(template.id),
-              issuedCertificateCount: counts.certificateCounts.get(template.id),
-            })
+            request.qs().view === 'summary'
+              ? {
+                  id: template.id,
+                  name: template.name,
+                  description: template.description,
+                  version: template.version,
+                  status: template.lifecycleStatus,
+                  readiness: getCertificateTemplateReadiness(template),
+                }
+              : serializeTemplate(template, {
+                  activityUsageCount: counts.activityCounts.get(template.id),
+                  issuedCertificateCount: counts.certificateCounts.get(template.id),
+                })
           ),
         },
       })
     } catch {
       return response.internalServerError({ message: 'GENERAL_ERROR' })
+    }
+  }
+
+  async duplicate({ params, response, auth, requestId }: HttpContext) {
+    const id = parsePositiveId(params.id)
+    if (!id) return response.badRequest({ message: 'INVALID_CERTIFICATE_TEMPLATE_ID' })
+    try {
+      const template = await duplicateCertificateTemplate(id)
+      logger.info({
+        event: 'certificate_template_duplicated',
+        template_id: template.id,
+        source_id: id,
+        actor_admin_id: auth.user?.id,
+        request_id: requestId,
+      })
+      return response.created({
+        message: 'CERTIFICATE_TEMPLATE_CREATED_SUCCESS',
+        data: serializeTemplate(template),
+      })
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'E_ROW_NOT_FOUND')
+        return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
+      return response.unprocessableEntity({ message: 'CERTIFICATE_ASSET_COPY_FAILED' })
     }
   }
 
@@ -237,6 +270,16 @@ export default class CertificateTemplatesController {
           return { kind: 'conflict' as const, template }
         }
 
+        if (
+          template.lifecycleStatus !== 'draft' &&
+          (payload.templateData !== undefined ||
+            payload.backgroundImage !== undefined ||
+            payload.name !== undefined ||
+            payload.description !== undefined ||
+            payload.status === 'draft')
+        )
+          return { kind: 'read-only' as const }
+
         let nextTemplateData = payload.templateData as TemplateData | undefined
         const backgroundChanged =
           payload.backgroundImage !== undefined &&
@@ -310,6 +353,8 @@ export default class CertificateTemplatesController {
         return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
       }
       if (result.kind === 'conflict') return versionConflict(response, result.template)
+      if (result.kind === 'read-only')
+        return response.conflict({ message: 'CERTIFICATE_TEMPLATE_USE_DRAFT_COPY' })
       if (result.kind === 'invalid-asset') {
         return response.status(422).json({ message: 'INVALID_CERTIFICATE_ASSET_KEY' })
       }
@@ -478,6 +523,7 @@ export default class CertificateTemplatesController {
 
   async uploadBackground({ request, params, response, auth, requestId }: HttpContext) {
     let uploadedKey: string | null = null
+    let committed = false
 
     try {
       const payload = await request.validateUsing(backgroundImageValidator)
@@ -488,38 +534,44 @@ export default class CertificateTemplatesController {
         return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
       }
 
+      if (template.lifecycleStatus !== 'draft')
+        return response.conflict({ message: 'CERTIFICATE_TEMPLATE_USE_DRAFT_COPY' })
+
       const file = payload.file
       const assetVersion = template.backgroundAssetVersion + 1
-      const previousBackground = template.backgroundImage
       uploadedKey = await storeOptimizedImage(
         file,
         `certificate/templates/${template.id}/background/v${assetVersion}-${randomUUID()}`,
         'certificate'
       )
 
-      try {
-        await template
+      const updated = await db.transaction(async (trx) => {
+        const current = await CertificateTemplate.query({ client: trx })
+          .where('id', template.id)
+          .forUpdate()
+          .firstOrFail()
+        if (current.lifecycleStatus !== 'draft' || current.version !== template.version)
+          return false
+        await current
           .merge({
             backgroundImage: uploadedKey,
             backgroundAssetVersion: assetVersion,
-            version: template.version + 1,
+            version: current.version + 1,
           })
           .save()
-      } catch (error) {
+        template.version = current.version
+        return true
+      })
+      if (!updated) {
         await drive
           .use()
           .delete(uploadedKey)
           .catch(() => undefined)
-        throw error
+        uploadedKey = null
+        return response.conflict({ message: 'CERTIFICATE_TEMPLATE_VERSION_CONFLICT' })
       }
 
-      if (previousBackground && previousBackground !== uploadedKey) {
-        await drive
-          .use()
-          .delete(previousBackground)
-          .catch(() => undefined)
-      }
-
+      committed = true
       logger.info({
         event: 'certificate_template_background_uploaded',
         request_id: requestId,
@@ -539,6 +591,11 @@ export default class CertificateTemplatesController {
         },
       })
     } catch (error) {
+      if (uploadedKey && !committed)
+        await drive
+          .use()
+          .delete(uploadedKey)
+          .catch(() => undefined)
       if (error instanceof errors.E_VALIDATION_ERROR) {
         return validationError(response, error)
       }
@@ -558,6 +615,9 @@ export default class CertificateTemplatesController {
       if (!template) {
         return response.notFound({ message: 'CERTIFICATE_TEMPLATE_NOT_FOUND' })
       }
+
+      if (template.lifecycleStatus !== 'draft')
+        return response.conflict({ message: 'CERTIFICATE_TEMPLATE_USE_DRAFT_COPY' })
 
       const assetKey = await storeOptimizedImage(
         payload.file,

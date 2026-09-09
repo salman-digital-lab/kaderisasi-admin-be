@@ -1,8 +1,6 @@
-import type { HttpContext } from '@adonisjs/core/http'
-import vine, { errors } from '@vinejs/vine'
 import {
-  buildCertificateData,
   buildBulkCertificateData,
+  buildCertificateData,
   getIssuedCertificateByCode,
   getIssuedCertificateById,
   issueBulkCertificates,
@@ -11,6 +9,13 @@ import {
   revokeIssuedCertificate,
   type CertificateErrorType,
 } from '#services/certificate_service'
+import {
+  getCertificateRecipients,
+  getRecipientNames,
+  prepareCertificateIssuance,
+} from '#services/certificate_workflow_service'
+import type { HttpContext } from '@adonisjs/core/http'
+import vine, { errors } from '@vinejs/vine'
 
 const generateCertificatesValidator = vine.compile(
   vine.object({
@@ -27,10 +32,43 @@ const registrationCertificateValidator = vine.compile(
 
 const issueBulkCertificateValidator = vine.compile(
   vine.object({
+    expected: vine
+      .object({
+        activity_id: vine.number().positive().withoutDecimals(),
+        template_id: vine.number().positive().withoutDecimals(),
+        template_version: vine.number().positive().withoutDecimals(),
+      })
+      .optional(),
+    response_mode: vine.enum(['full', 'compact']).optional(),
     registration_ids: vine
       .array(vine.number().withoutDecimals().positive())
       .minLength(1)
       .maxLength(100),
+  })
+)
+
+const prepareValidator = vine.compile(
+  vine.object({
+    activity_id: vine.number().positive().withoutDecimals(),
+    registration_ids: vine
+      .array(vine.number().positive().withoutDecimals())
+      .minLength(1)
+      .maxLength(100_000)
+      .optional(),
+  })
+)
+const recipientsValidator = vine.compile(
+  vine.object({
+    page: vine.number().positive().withoutDecimals().optional(),
+    per_page: vine.number().range([1, 100]).withoutDecimals().optional(),
+    search: vine.string().trim().maxLength(255).optional(),
+    state: vine
+      .enum(['eligible_not_issued', 'not_eligible', 'issued_active', 'issued_revoked'])
+      .optional(),
+    registration_ids: vine
+      .array(vine.number().positive().withoutDecimals())
+      .maxLength(200)
+      .optional(),
   })
 )
 
@@ -70,6 +108,8 @@ function domainError(
     return response.notFound({ message: error })
   }
 
+  if (error === 'CERTIFICATE_CONTEXT_CHANGED') return response.conflict({ message: error })
+
   if (error === 'REGISTRATION_NOT_ELIGIBLE' || error === 'CERTIFICATE_ALREADY_REVOKED') {
     return response.conflict({ message: error })
   }
@@ -86,6 +126,42 @@ function domainError(
 }
 
 export default class CertificatesController {
+  async recipients({ params, request, response }: HttpContext) {
+    const activityId = parsePositiveId(params.activityId)
+    if (!activityId) return response.badRequest({ message: 'INVALID_ACTIVITY_ID' })
+    try {
+      const options = await recipientsValidator.validate(request.qs())
+      const data = await getCertificateRecipients(activityId, {
+        page: options.page ?? 1,
+        perPage: options.per_page ?? 50,
+        search: options.search,
+        state: options.state,
+        registrationIds: options.registration_ids,
+      })
+      return response.ok({ message: 'GET_DATA_SUCCESS', data })
+    } catch (error) {
+      if (error instanceof errors.E_VALIDATION_ERROR) return validationError(response, error)
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'E_ROW_NOT_FOUND')
+        return response.notFound({ message: 'ACTIVITY_NOT_FOUND' })
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
+    }
+  }
+
+  async prepare({ request, response }: HttpContext) {
+    try {
+      const payload = await request.validateUsing(prepareValidator)
+      const result = await prepareCertificateIssuance(payload.activity_id, payload.registration_ids)
+      return result.success
+        ? response.ok({ message: 'CERTIFICATE_REVIEW_READY', data: result.data })
+        : domainError(response, result.error)
+    } catch (error) {
+      if (error instanceof errors.E_VALIDATION_ERROR) return validationError(response, error)
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'E_ROW_NOT_FOUND')
+        return response.notFound({ message: 'ACTIVITY_NOT_FOUND' })
+      return response.internalServerError({ message: 'GENERAL_ERROR' })
+    }
+  }
+
   async index({ request, response }: HttpContext) {
     try {
       const rawActivityId = request.qs().activity_id
@@ -96,7 +172,13 @@ export default class CertificatesController {
 
       const page = Math.max(Number(request.qs().page) || 1, 1)
       const perPage = Math.min(Math.max(Number(request.qs().per_page) || 20, 1), 100)
-      const certificates = await listIssuedCertificates({ activityId, page, perPage })
+      const filters = await recipientsValidator.validate(request.qs())
+      const certificates = await listIssuedCertificates({
+        activityId,
+        page,
+        perPage,
+        registrationIds: filters.registration_ids,
+      })
 
       return response.ok({ message: 'GET_DATA_SUCCESS', data: certificates })
     } catch {
@@ -183,9 +265,44 @@ export default class CertificatesController {
       const result = await issueBulkCertificates(
         payload.registration_ids,
         auth.user?.id ?? null,
-        requestId
+        requestId,
+        payload.expected
       )
 
+      if (payload.response_mode === 'compact') {
+        const names = await getRecipientNames(payload.registration_ids)
+        const results = [
+          ...result.created.map((item) => ({
+            registration_id: item.participant.registration_id,
+            name: item.participant.name,
+            state: 'created',
+            certificate_id: item.certificate?.id,
+            certificate_code: item.certificate?.certificate_code,
+          })),
+          ...result.already_issued.map((item) => ({
+            registration_id: item.participant.registration_id,
+            name: item.participant.name,
+            state: item.certificate?.revoked_at ? 'skipped' : 'already_issued',
+            reason: item.certificate?.revoked_at ? 'CERTIFICATE_ALREADY_REVOKED' : undefined,
+            certificate_id: item.certificate?.id,
+            certificate_code: item.certificate?.certificate_code,
+          })),
+          ...result.skipped.map((item) => ({
+            ...item,
+            name: names.get(item.registration_id) ?? 'Peserta',
+            state: 'skipped',
+          })),
+          ...result.failed.map((item) => ({
+            ...item,
+            name: names.get(item.registration_id) ?? 'Peserta',
+            state: 'failed',
+          })),
+        ]
+        return response.ok({
+          message: 'CERTIFICATES_ISSUED',
+          data: { results, paused: result.paused, remaining_ids: result.remaining_ids },
+        })
+      }
       return response.ok({ message: 'CERTIFICATES_ISSUED', data: result })
     } catch (error) {
       if (error instanceof errors.E_VALIDATION_ERROR) {

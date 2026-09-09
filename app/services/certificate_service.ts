@@ -1,7 +1,3 @@
-import { DateTime } from 'luxon'
-import logger from '@adonisjs/core/services/logger'
-import db from '@adonisjs/lucid/services/db'
-import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import Activity from '#models/activity'
 import ActivityRegistration from '#models/activity_registration'
 import CertificateTemplate from '#models/certificate_template'
@@ -9,6 +5,10 @@ import IssuedCertificate from '#models/issued_certificate'
 import University from '#models/university'
 import { generateCertificateCode } from '#services/certificate_code_service'
 import { getCertificateTemplateReadiness } from '#services/certificate_template_readiness_service'
+import logger from '@adonisjs/core/services/logger'
+import db from '@adonisjs/lucid/services/db'
+import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
+import { DateTime } from 'luxon'
 
 export const ELIGIBLE_CERTIFICATE_STATUS = 'LULUS KEGIATAN'
 
@@ -59,6 +59,7 @@ export type CertificateResponseData = {
 }
 
 export type CertificateErrorType =
+  | 'CERTIFICATE_CONTEXT_CHANGED'
   | 'REGISTRATION_NOT_FOUND'
   | 'REGISTRATION_NOT_ELIGIBLE'
   | 'ACTIVITY_NOT_FOUND'
@@ -78,7 +79,15 @@ export type IssueCertificateResult =
   | { success: true; data: CertificateResponseData; issued: IssuedCertificate; created: boolean }
   | { success: false; error: CertificateErrorType; details?: string[] }
 
+export interface IssuanceExpectation {
+  activity_id: number
+  template_id: number
+  template_version: number
+}
+
 export type BulkCertificateResult = {
+  remaining_ids: number[]
+  paused: boolean
   created: CertificateResponseData[]
   already_issued: CertificateResponseData[]
   issued: CertificateResponseData[]
@@ -359,9 +368,39 @@ async function insertIssuedCertificate(
 export async function issueSingleCertificate(
   registrationId: number,
   issuedBy: number | null,
-  requestId?: string
+  requestId?: string,
+  expected?: IssuanceExpectation
 ): Promise<IssueCertificateResult> {
   const result = await db.transaction(async (trx) => {
+    if (expected) {
+      // Same lock order as loadCertificateSource: registration, activity, template.
+      const registration = await ActivityRegistration.query({ client: trx })
+        .where('id', registrationId)
+        .forUpdate()
+        .first()
+      if (!registration)
+        return { success: false as const, error: 'REGISTRATION_NOT_FOUND' as const }
+      const activity = await Activity.query({ client: trx })
+        .where('id', registration.activityId)
+        .forUpdate()
+        .first()
+      const template = await CertificateTemplate.query({ client: trx })
+        .where('id', expected.template_id)
+        .forUpdate()
+        .first()
+      if (
+        !activity ||
+        activity.id !== expected.activity_id ||
+        (activity.certificateTemplateId ?? activity.additionalConfig?.certificate_template_id) !==
+          expected.template_id ||
+        !template ||
+        template.version !== expected.template_version ||
+        template.lifecycleStatus !== 'published' ||
+        !getCertificateTemplateReadiness(template).ready
+      ) {
+        return { success: false as const, error: 'CERTIFICATE_CONTEXT_CHANGED' as const }
+      }
+    }
     const existing = await IssuedCertificate.query({ client: trx })
       .where('registrationId', registrationId)
       .first()
@@ -406,17 +445,24 @@ export async function issueSingleCertificate(
 export async function issueBulkCertificates(
   registrationIds: number[],
   issuedBy: number | null,
-  requestId?: string
+  requestId?: string,
+  expected?: IssuanceExpectation
 ): Promise<BulkCertificateResult> {
+  const startedAt = Date.now()
   const uniqueRegistrationIds = [...new Set(registrationIds)]
   const created: CertificateResponseData[] = []
   const alreadyIssued: CertificateResponseData[] = []
   const skipped: BulkCertificateResult['skipped'] = []
   const failed: BulkCertificateResult['failed'] = []
 
-  for (const registrationId of uniqueRegistrationIds) {
+  let remainingIds: number[] = []
+  for (const [index, registrationId] of uniqueRegistrationIds.entries()) {
     try {
-      const result = await issueSingleCertificate(registrationId, issuedBy, requestId)
+      const result = await issueSingleCertificate(registrationId, issuedBy, requestId, expected)
+      if (!result.success && result.error === 'CERTIFICATE_CONTEXT_CHANGED') {
+        remainingIds = uniqueRegistrationIds.slice(index)
+        break
+      }
       if (!result.success) {
         skipped.push({ registration_id: registrationId, reason: result.error })
       } else if (result.created) {
@@ -431,6 +477,8 @@ export async function issueBulkCertificates(
 
   logger.info({
     event: 'certificate_bulk_issue_completed',
+    duration_ms: Date.now() - startedAt,
+    context_changed: remainingIds.length > 0,
     request_id: requestId,
     actor_admin_id: issuedBy,
     total_requested: uniqueRegistrationIds.length,
@@ -441,6 +489,8 @@ export async function issueBulkCertificates(
   })
 
   return {
+    remaining_ids: remainingIds,
+    paused: remainingIds.length > 0,
     created,
     already_issued: alreadyIssued,
     issued: created,
@@ -455,11 +505,25 @@ export async function issueBulkCertificates(
 }
 
 export async function listIssuedCertificates(options: {
+  registrationIds?: number[]
   activityId?: number
   page: number
   perPage: number
 }): Promise<{ meta: Record<string, unknown>; data: IssuedCertificateListItem[] }> {
   const query = IssuedCertificate.query()
+    .select(
+      'id',
+      'certificateCode',
+      'registrationId',
+      'activityId',
+      'participantSnapshot',
+      'issuedAt',
+      'issuedBy',
+      'revokedAt',
+      'revokedReason',
+      'revokedBy'
+    )
+    .select(db.raw("template_snapshot->>'name' as template_name"))
     .preload('issuer')
     .preload('revoker')
     .orderBy('issuedAt', 'desc')
@@ -468,6 +532,7 @@ export async function listIssuedCertificates(options: {
     query.where('activityId', options.activityId)
   }
 
+  if (options.registrationIds) query.whereIn('registrationId', options.registrationIds)
   const certificates = await query.paginate(options.page, options.perPage)
   const serialized = certificates.serialize()
 
@@ -481,7 +546,7 @@ export async function listIssuedCertificates(options: {
       participant_name: issued.participantSnapshot.name,
       participant_email: issued.participantSnapshot.email,
       activity_name: issued.participantSnapshot.activity_name,
-      template_name: issued.templateSnapshot.name,
+      template_name: String(issued.$extras.template_name ?? ''),
       issued_at: issued.issuedAt.toISO() ?? '',
       issued_by: issued.issuedBy,
       issued_by_name: issued.issuer?.displayName ?? null,
