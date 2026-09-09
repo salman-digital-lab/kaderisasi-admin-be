@@ -403,7 +403,7 @@ export default class ClubRegistrationsController {
           profile?.intakeYear || '',
           profile ? this.getLevelLabel(profile.level || 0) : '',
           registration.status,
-          registration.createdAt.toFormat('yyyy-MM-dd HH:mm:ss'),
+          registration.createdAt?.setZone('Asia/Jakarta').toFormat('yyyy-MM-dd HH:mm:ss') || '',
         ]
 
         const answers = registration.additionalData || {}

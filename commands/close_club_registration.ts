@@ -15,13 +15,14 @@ export default class CloseClubRegistration extends BaseCommand {
 
   async run() {
     try {
-      const currentDate = DateTime.local()
+      const currentDate = DateTime.now().setZone('Asia/Jakarta').toSQLDate()
+      if (!currentDate) throw new Error('INVALID_REGISTRATION_DATE')
 
       // Find clubs that have registration open but their registration end date has passed
       const expiredClubs = await Club.query()
         .where('is_registration_open', true)
         .whereNotNull('registration_end_date')
-        .where('registration_end_date', '<', currentDate.toSQLDate())
+        .where('registration_end_date', '<', currentDate)
         .update({ is_registration_open: false }, ['id', 'name', 'registration_end_date'])
 
       logger.info('Completed: Closed club registrations')
