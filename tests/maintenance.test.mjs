@@ -85,7 +85,11 @@ test('Ace migrations, seeders, and preflight on an owned schema', { timeout: 240
     await client.query(`SET search_path TO "${schema}"`)
     ace(['migration:run', '--force'])
     const rows = await client.query('SELECT * FROM adonis_schema ORDER BY id')
-    assert.equal(rows.rowCount, Object.keys(manifest).length)
+    assert.equal(
+      rows.rowCount,
+      readdirSync(resolve(root, 'database/migrations')).filter((name) => name.endsWith('.ts'))
+        .length
+    )
     ace(['migration:run', '--force'])
     assert.deepEqual(
       (await client.query('SELECT * FROM adonis_schema ORDER BY id')).rows,
