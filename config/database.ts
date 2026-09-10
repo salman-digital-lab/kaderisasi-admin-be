@@ -1,6 +1,9 @@
 import env from '#start/env'
 import { defineConfig } from '@adonisjs/lucid'
 
+const schema = env.get('DB_SCHEMA')
+if (schema && !/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error('Invalid DB_SCHEMA')
+
 const dbConfig = defineConfig({
   connection: 'postgres',
   connections: {
@@ -12,6 +15,7 @@ const dbConfig = defineConfig({
         user: env.get('DB_USER'),
         password: env.get('DB_PASSWORD'),
         database: env.get('DB_DATABASE'),
+        ...(schema ? { options: `-c search_path=${schema}` } : {}),
       },
       pool: {
         min: 2,

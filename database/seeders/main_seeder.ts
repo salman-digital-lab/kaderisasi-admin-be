@@ -1,37 +1,53 @@
 import { BaseSeeder } from '@adonisjs/lucid/seeders'
 import csv from 'csvtojson'
+import Country from '#models/country'
+import db from '@adonisjs/lucid/services/db'
 
 import { AdminUserFactory } from '#database/factories/admin_user_factory'
 
-import Province from '#models/province'
-import City from '#models/city'
-import Country from '#models/country'
-import University from '#models/university'
 import { AchievementFactory } from '#database/factories/achievement_factory'
 import { PublicUserFactory } from '#database/factories/public_user_factory'
+async function upsertReference(
+  table: string,
+  key: string,
+  rows: Record<string, string | number | boolean>[]
+): Promise<void> {
+  await db.transaction(async (trx) => {
+    for (let offset = 0; offset < rows.length; offset += 500) {
+      await trx
+        .table(table)
+        .multiInsert(rows.slice(offset, offset + 500))
+        .knexQuery.onConflict(key)
+        .merge()
+    }
+  })
+}
+
 export default class extends BaseSeeder {
   async run() {
     const provincesArr: { code: string; name: string }[] = await csv().fromFile(
       'database/data/provinces.csv'
     )
-    await Province.updateOrCreateMany(
+    await upsertReference(
+      'provinces',
       'id',
       provincesArr.map((item) => ({
         id: Number(item.code),
         name: item.name,
-        isActive: true,
+        is_active: true,
       }))
     )
     const citiesArr: { code: string; name: string; province_code: string }[] = await csv().fromFile(
       'database/data/regencies.csv'
     )
-    await City.updateOrCreateMany(
+    await upsertReference(
+      'cities',
       'id',
       citiesArr.map((item) => ({
         id: Number(item.code.split('.').join('')),
-        provinceId: Number(item.province_code),
+        province_id: Number(item.province_code),
         name: item.name,
-        isActive: true,
+        is_active: true,
       }))
     )
     const countriesArr: { Name: string; Code: string }[] = await csv().fromFile(
@@ -46,12 +62,13 @@ export default class extends BaseSeeder {
     )
     const universitiesArr: { ud_sp: string; kode_pt: string; nama_pt: string }[] =
       await csv().fromFile('database/data/universities.csv')
-    await University.updateOrCreateMany(
+    await upsertReference(
+      'universities',
       'id',
       universitiesArr.map((item, idx) => ({
         id: idx,
         name: item.nama_pt,
-        isActive: true,
+        is_active: true,
       }))
     )
     // Demo account without operational access

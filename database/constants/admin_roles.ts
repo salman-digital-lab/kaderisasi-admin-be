@@ -1,0 +1,18 @@
+export const ADMIN_ROLE_CODES = [
+  'super_admin',
+  'admin',
+  'asmen',
+  'kapro',
+  'konselor',
+  'leaderboard',
+  'operations_admin',
+  'member_manager',
+  'activity_manager',
+  'club_manager',
+  'certificate_manager',
+  'achievement_reviewer',
+  'counselor',
+  'reference_data_manager',
+  'form_manager',
+  'access_reviewer',
+] as const

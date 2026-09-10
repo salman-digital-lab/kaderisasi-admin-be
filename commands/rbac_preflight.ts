@@ -13,7 +13,7 @@ export default class RbacPreflight extends BaseCommand {
   async run(): Promise<void> {
     const columns = await db
       .from('information_schema.columns')
-      .where('table_schema', 'public')
+      .whereRaw('table_schema = current_schema()')
       .where('table_name', 'admin_users')
       .select('column_name')
     const columnNames = new Set<string>(columns.map((column) => column.column_name))
