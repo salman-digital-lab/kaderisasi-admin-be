@@ -1,5 +1,7 @@
 # Kaderisasi database maintenance
 
+Agent contribution rules: [AGENTS.md](AGENTS.md). `CLAUDE.md` imports the same rules.
+
 This repository owns the PostgreSQL migrations shared by the Go admin API and
 the Adonis public API. It contains no HTTP server, routes, controllers, storage
 adapter, or scheduled business jobs. The API and all three jobs run from
