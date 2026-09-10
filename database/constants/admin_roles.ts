@@ -15,4 +15,5 @@ export const ADMIN_ROLE_CODES = [
   'reference_data_manager',
   'form_manager',
   'access_reviewer',
+  'course_manager',
 ] as const

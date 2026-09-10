@@ -124,6 +124,54 @@ test('Ace migrations, seeders, and preflight on an owned schema', { timeout: 240
     )
     const passwords = (await client.query('SELECT password FROM public_users')).rows
     assert.ok(passwords.every((row) => row.password.startsWith('$scrypt$')))
+    const course = (
+      await client.query("INSERT INTO courses(title) VALUES ('Migration course') RETURNING *")
+    ).rows[0]
+    assert.equal(course.status, 'draft')
+    assert.equal(course.minimum_level, 0)
+    await assert.rejects(
+      client.query('UPDATE courses SET minimum_level=4 WHERE id=$1', [course.id]),
+      /check constraint/
+    )
+    await assert.rejects(
+      client.query("UPDATE courses SET status='invalid' WHERE id=$1", [course.id]),
+      /check constraint/
+    )
+    const lesson = (
+      await client.query(
+        "INSERT INTO course_lessons(course_id,title,position) VALUES ($1,'Lesson',1) RETURNING id",
+        [course.id]
+      )
+    ).rows[0]
+    const user = (await client.query('SELECT id FROM public_users ORDER BY id LIMIT 1')).rows[0]
+    await client.query('INSERT INTO course_lesson_progress(user_id,lesson_id) VALUES ($1,$2)', [
+      user.id,
+      lesson.id,
+    ])
+    await assert.rejects(
+      client.query('INSERT INTO course_lesson_progress(user_id,lesson_id) VALUES ($1,$2)', [
+        user.id,
+        lesson.id,
+      ]),
+      /unique constraint/
+    )
+    await assert.rejects(
+      client.query(
+        "INSERT INTO course_documents(lesson_id,storage_key,filename,size_bytes) VALUES ($1,'test','test.pdf',20971521)",
+        [lesson.id]
+      ),
+      /check constraint/
+    )
+    await client.query('UPDATE course_lessons SET deleted_at=now() WHERE id=$1', [lesson.id])
+    assert.equal(
+      (
+        await client.query(
+          'SELECT count(*)::int AS count FROM course_lesson_progress WHERE lesson_id=$1',
+          [lesson.id]
+        )
+      ).rows[0].count,
+      1
+    )
     for (const table of ['countries', 'provinces', 'cities', 'universities']) {
       assert.ok(
         (await client.query(`SELECT count(*)::int AS count FROM ${table}`)).rows[0].count > 0
