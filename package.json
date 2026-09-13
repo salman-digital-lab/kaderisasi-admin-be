@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "node ace build",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "migrate": "node ace migration:run",
     "migration:status": "node ace migration:status",
     "seed": "node ace db:seed",
