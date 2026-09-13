@@ -84,6 +84,7 @@ test('Ace migrations, seeders, and preflight on an owned schema', { timeout: 240
     save()
     await client.query(`SET search_path TO "${schema}"`)
     ace(['migration:run', '--force'])
+    assert.equal((await client.query("SELECT to_regclass('legacy_member_migrations') AS journal")).rows[0].journal, null)
     const rows = await client.query('SELECT * FROM adonis_schema ORDER BY id')
     assert.equal(
       rows.rowCount,

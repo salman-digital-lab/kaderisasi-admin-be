@@ -30,13 +30,7 @@ const dbConfig = defineConfig({
       },
       migrations: {
         naturalSort: true,
-        paths: [
-          process.env.LEGACY_MEMBER_PAUSE === '1'
-            ? 'database/cutover'
-            : process.env.LEGACY_MEMBER_RETIREMENT === '1'
-              ? 'database/retirement'
-              : 'database/migrations',
-        ],
+        paths: ['database/migrations'],
       },
     },
   },

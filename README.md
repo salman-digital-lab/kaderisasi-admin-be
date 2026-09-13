@@ -69,3 +69,12 @@ a detached checkout under `.artifacts/legacy-admin-be` at the recorded revision.
 Tests use that checkout for old API behavior and this repository for migrations.
 Production rollback uses the retained Coolify image described in the Go repo's
 `docs/COOLIFY.md`; changing this repository does not switch live traffic.
+
+## Explicit environment selection
+
+Run shared database maintenance with `node scripts/maintenance.mjs --environment=prod migration:status`
+or `node scripts/maintenance.mjs --environment=prod migration:run --force`. Use
+`--environment=test` for the configured test database. This runner does not replace `.env`.
+
+Legacy member import is complete. One-time import commands and reconciliation data
+have been retired; applied schema migrations remain as historical records.
