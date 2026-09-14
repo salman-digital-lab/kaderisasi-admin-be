@@ -18,6 +18,7 @@ export default class RbacPreflight extends BaseCommand {
       .select('column_name')
     const columnNames = new Set<string>(columns.map((column) => column.column_name))
     const rbacReady = columnNames.has('role_code')
+    const multiRole = columnNames.has('additional_role_codes')
     const bootstrapEmails = parseBootstrapEmails(env.get('ADMIN_BOOTSTRAP_EMAILS', ''))
     const inactiveAccounts = await db
       .from('admin_users')
@@ -39,7 +40,10 @@ export default class RbacPreflight extends BaseCommand {
     const activeSuperAdmins = rbacReady
       ? await db
           .from('admin_users')
-          .where('role_code', 'super_admin')
+          .where((query) => {
+            query.where('role_code', 'super_admin')
+            if (multiRole) query.orWhereRaw("'super_admin' = ANY(additional_role_codes)")
+          })
           .where('is_active', true)
           .select('id')
       : []
@@ -58,8 +62,17 @@ export default class RbacPreflight extends BaseCommand {
           .whereNotIn('role_code', [...ADMIN_ROLE_CODES])
           .select('id', 'role_code')
       : []
+    const unknownAdditionalRoles = multiRole
+      ? await db
+          .from('admin_users')
+          .whereRaw(
+            'EXISTS (SELECT 1 FROM unnest(additional_role_codes) AS assigned(code) WHERE code IS NULL OR NOT (code = ANY(?::text[])))',
+            [[...ADMIN_ROLE_CODES]]
+          )
+          .select('id', 'additional_role_codes')
+      : []
     const blockers = [
-      ...(unknownRoles.length ? ['UNKNOWN_ROLE_CODES'] : []),
+      ...(unknownRoles.length || unknownAdditionalRoles.length ? ['UNKNOWN_ROLE_CODES'] : []),
       ...(!columnNames.has('role') && !rbacReady ? ['UNEXPECTED_ADMIN_SCHEMA'] : []),
       ...(duplicateEmails.length ? ['DUPLICATE_NORMALIZED_EMAILS'] : []),
       ...(invalidEmails.length ? ['EMPTY_ADMIN_EMAILS'] : []),
@@ -78,6 +91,7 @@ export default class RbacPreflight extends BaseCommand {
           invalid_email_accounts: invalidEmails,
           role_distribution: roleDistribution,
           unknown_role_accounts: unknownRoles,
+          unknown_additional_role_accounts: unknownAdditionalRoles,
           active_super_admin_count: activeSuperAdmins.length,
           blockers,
         },

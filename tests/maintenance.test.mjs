@@ -107,6 +107,20 @@ test('Ace migrations, seeders, and preflight on an owned schema', { timeout: 240
     )
     assert.deepEqual((await client.query('SELECT * FROM admin_users ORDER BY id')).rows, before)
     ace(['db:seed', '--files=database/seeders/admin_rbac_seeder.ts'])
+    assert.deepEqual(
+      (await client.query('SELECT additional_role_codes FROM admin_users')).rows[0].additional_role_codes,
+      []
+    )
+    await client.query("UPDATE admin_users SET role_code='konselor', additional_role_codes=ARRAY['super_admin','activity_manager']")
+    assert.match(ace(['rbac:preflight'], 0, { ADMIN_BOOTSTRAP_EMAILS: '' }), /RBAC preflight passed/)
+    ace(['db:seed', '--files=database/seeders/admin_rbac_seeder.ts'])
+    assert.deepEqual(
+      (await client.query('SELECT role_code, additional_role_codes FROM admin_users')).rows[0],
+      { role_code: 'konselor', additional_role_codes: ['super_admin', 'activity_manager'] }
+    )
+    await client.query("UPDATE admin_users SET additional_role_codes=ARRAY['super_admin','unknown_role']")
+    assert.match(ace(['rbac:preflight'], 1), /UNKNOWN_ROLE_CODES/)
+    await client.query("UPDATE admin_users SET role_code='super_admin', additional_role_codes=ARRAY[]::text[]")
     assert.equal(
       (await client.query('SELECT count(*)::int AS count FROM admin_users')).rows[0].count,
       1
