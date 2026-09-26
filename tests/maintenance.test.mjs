@@ -84,13 +84,26 @@ test('Ace migrations, seeders, and preflight on an owned schema', { timeout: 240
     save()
     await client.query(`SET search_path TO "${schema}"`)
     ace(['migration:run', '--force'])
-    assert.equal((await client.query("SELECT to_regclass('legacy_member_migrations') AS journal")).rows[0].journal, null)
+    assert.equal(
+      (await client.query("SELECT to_regclass('legacy_member_migrations') AS journal")).rows[0]
+        .journal,
+      null
+    )
     const rows = await client.query('SELECT * FROM adonis_schema ORDER BY id')
     assert.equal(
       rows.rowCount,
       readdirSync(resolve(root, 'database/migrations')).filter((name) => name.endsWith('.ts'))
         .length
     )
+    const activeIndex = await client.query(
+      "SELECT indexdef FROM pg_indexes WHERE schemaname=$1 AND indexname='issued_certificates_active_registration_unique'",
+      [schema]
+    )
+    assert.match(activeIndex.rows[0].indexdef, /UNIQUE.*registration_id.*WHERE.*revoked_at IS NULL/)
+    const oldConstraint = await client.query(
+      "SELECT 1 FROM pg_constraint WHERE conrelid='issued_certificates'::regclass AND conname='issued_certificates_registration_id_unique'"
+    )
+    assert.equal(oldConstraint.rowCount, 0)
     ace(['migration:run', '--force'])
     assert.deepEqual(
       (await client.query('SELECT * FROM adonis_schema ORDER BY id')).rows,
@@ -108,19 +121,29 @@ test('Ace migrations, seeders, and preflight on an owned schema', { timeout: 240
     assert.deepEqual((await client.query('SELECT * FROM admin_users ORDER BY id')).rows, before)
     ace(['db:seed', '--files=database/seeders/admin_rbac_seeder.ts'])
     assert.deepEqual(
-      (await client.query('SELECT additional_role_codes FROM admin_users')).rows[0].additional_role_codes,
+      (await client.query('SELECT additional_role_codes FROM admin_users')).rows[0]
+        .additional_role_codes,
       []
     )
-    await client.query("UPDATE admin_users SET role_code='konselor', additional_role_codes=ARRAY['super_admin','activity_manager']")
-    assert.match(ace(['rbac:preflight'], 0, { ADMIN_BOOTSTRAP_EMAILS: '' }), /RBAC preflight passed/)
+    await client.query(
+      "UPDATE admin_users SET role_code='konselor', additional_role_codes=ARRAY['super_admin','activity_manager']"
+    )
+    assert.match(
+      ace(['rbac:preflight'], 0, { ADMIN_BOOTSTRAP_EMAILS: '' }),
+      /RBAC preflight passed/
+    )
     ace(['db:seed', '--files=database/seeders/admin_rbac_seeder.ts'])
     assert.deepEqual(
       (await client.query('SELECT role_code, additional_role_codes FROM admin_users')).rows[0],
       { role_code: 'konselor', additional_role_codes: ['super_admin', 'activity_manager'] }
     )
-    await client.query("UPDATE admin_users SET additional_role_codes=ARRAY['super_admin','unknown_role']")
+    await client.query(
+      "UPDATE admin_users SET additional_role_codes=ARRAY['super_admin','unknown_role']"
+    )
     assert.match(ace(['rbac:preflight'], 1), /UNKNOWN_ROLE_CODES/)
-    await client.query("UPDATE admin_users SET role_code='super_admin', additional_role_codes=ARRAY[]::text[]")
+    await client.query(
+      "UPDATE admin_users SET role_code='super_admin', additional_role_codes=ARRAY[]::text[]"
+    )
     assert.equal(
       (await client.query('SELECT count(*)::int AS count FROM admin_users')).rows[0].count,
       1
