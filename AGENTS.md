@@ -58,7 +58,7 @@ For migration, seeder, preflight, or configuration changes:
 npm run lint
 npm run typecheck
 npm run build
-MIGRATION_TEST_ENV=../docs/.env.test.be npm test
+MIGRATION_TEST_ENV=../env/test/admin-be-test-env npm test
 ```
 
 Tests must use a dedicated test environment and uniquely owned schemas. Retain

@@ -7,7 +7,7 @@ const environment = args.find((arg) => arg.startsWith('--environment='))?.split(
 if (!['prod', 'test'].includes(environment))
   throw new Error('Supply --environment=prod or --environment=test')
 const configured = parseEnv(
-  readFileSync(new URL(`../../docs/.env.${environment}.be`, import.meta.url), 'utf8')
+  readFileSync(new URL(`../../env/${environment}/admin-be-${environment}-env`, import.meta.url), 'utf8')
 )
 const command = args.filter((arg) => !arg.startsWith('--environment='))
 if (!['migration:run', 'migration:status'].includes(command[0]))

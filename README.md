@@ -44,7 +44,7 @@ switch API implementations. Bulk import tools remain in `../db-migrate`.
 npm run lint
 npm run typecheck
 npm run build
-MIGRATION_TEST_ENV=../docs/.env.test.be npm test
+MIGRATION_TEST_ENV=../env/test/admin-be-test-env npm test
 ```
 
 Tests require a dedicated test PostgreSQL environment file and schema-creation
