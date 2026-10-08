@@ -31,7 +31,7 @@ current migration repository. Go production API and job source did not change.
 | `npm run typecheck` | Passed |
 | `npm run build` | Passed; compiled console and CSV data produced, no server entrypoint |
 | `node ace list` | Passed; RBAC preflight is discoverable, business job commands absent |
-| `MIGRATION_TEST_ENV=../docs/.env.test.be npm test` | Both tests passed; no skips; about 18 seconds |
+| `MIGRATION_TEST_ENV=../env/test/admin-be-test-env npm test` | Both tests passed; no skips; about 18 seconds |
 | Go `node scripts/check.mjs` | Formatting, vet, compilation, dependency verification, sqlc output, harness syntax, normalization tests passed |
 | Go `make test-unit` | Full race-enabled Go suite passed, including cross-language crypto fixtures |
 | Go inventory generation | Reproduced 139 routes, 54 validators, 16 roles from the historical reference |

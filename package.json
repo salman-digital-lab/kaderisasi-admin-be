@@ -49,5 +49,8 @@
     "reflect-metadata": "^0.2.2"
   },
   "prettier": "@adonisjs/prettier-config",
-  "description": "Shared PostgreSQL migrations, seeders, and RBAC preflight for Kaderisasi"
+  "description": "Shared PostgreSQL migrations, seeders, and RBAC preflight for Kaderisasi",
+  "overrides": {
+    "jsonschema": "1.4.1"
+  }
 }
