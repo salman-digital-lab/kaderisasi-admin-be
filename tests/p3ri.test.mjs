@@ -7,7 +7,7 @@ import { parseEnv } from 'node:util'
 import { spawn } from 'node:child_process'
 import pg from 'pg'
 
-test('p3ri migration creates registrations with their rules', { timeout: 60000 }, async () => {
+test('p3ri migrations create registrations with their rules', { timeout: 60000 }, async () => {
   assert.ok(process.env.MIGRATION_TEST_ENV)
   const root = resolve(import.meta.dirname, '..')
   const configured = parseEnv(readFileSync(resolve(process.env.MIGRATION_TEST_ENV), 'utf8'))
@@ -29,7 +29,7 @@ test('p3ri migration creates registrations with their rules', { timeout: 60000 }
     await db.query('CREATE TABLE adonis_schema_versions (version integer PRIMARY KEY)')
     await db.query('INSERT INTO adonis_schema_versions VALUES (2)')
     for (const file of readdirSync(resolve(root, 'database/migrations')).filter(
-      (name) => name.endsWith('.ts') && !name.includes('create_p3ri_registrations_table')
+      (name) => name.endsWith('.ts') && !name.includes('p3ri_registration')
     )) {
       await db.query('INSERT INTO adonis_schema(name,batch) VALUES($1,1)', [
         `database/migrations/${file.slice(0, -3)}`,
@@ -94,6 +94,9 @@ test('p3ri migration creates registrations with their rules', { timeout: 60000 }
       db.query("INSERT INTO p3ri_registrations(user_id,choices,answers) VALUES(2,ARRAY['a'],'[]')")
     )
     await assert.rejects(db.query("UPDATE p3ri_registrations SET status='lulus'"))
+    // Only terdaftar and diterima remain.
+    await assert.rejects(db.query("UPDATE p3ri_registrations SET status='seleksi_berkas'"))
+    await assert.rejects(db.query("UPDATE p3ri_registrations SET status='tidak_diterima'"))
     await assert.rejects(db.query("UPDATE p3ri_registrations SET status='diterima'"))
     await assert.rejects(
       db.query("UPDATE p3ri_registrations SET status='diterima', accepted_division='tarawih'")
