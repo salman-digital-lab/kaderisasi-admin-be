@@ -5,4 +5,5 @@ export const ADMIN_ROLE_CODES = [
   'activity_manager',
   'achievement_manager',
   'club_manager',
+  'perintis_manager',
 ] as const
