@@ -1,8 +1,8 @@
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 /**
- * The first Perintis reporting month moves from November to October 2026, so
- * its lapbul opens 1 November 2026. The month CHECKs were created unnamed, so
+ * The first Perintis reporting month moves from November to September 2026, so
+ * its lapbul opens 1 October 2026. The month CHECKs were created unnamed, so
  * they are found by their definition.
  */
 const TABLES = ['perintis_journals', 'perintis_session_reports']
@@ -30,7 +30,7 @@ function replaceMonthCheck(table: string, firstMonth: string) {
 
 export default class extends BaseSchema {
   async up() {
-    this.schema.raw(TABLES.map((t) => replaceMonthCheck(t, '2026-10-01')).join('\n'))
+    this.schema.raw(TABLES.map((t) => replaceMonthCheck(t, '2026-09-01')).join('\n'))
   }
 
   async down() {
