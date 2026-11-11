@@ -7,4 +7,5 @@ export const ADMIN_ROLE_CODES = [
   'club_manager',
   'perintis_manager',
   'p3ri',
+  'alumni_manager',
 ] as const
